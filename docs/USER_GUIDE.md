@@ -1,0 +1,87 @@
+# User Guide
+
+A tour of every control on the screen and how to read the outputs. For the
+science behind it, see [MODEL.md](MODEL.md); to add your own network or data, see
+[INTEGRATION.md](INTEGRATION.md).
+
+## The layout
+
+- **Left panel** — pick a corridor, set demand and controller parameters, toggle
+  VSL, and upload demand data.
+- **Centre stage** — the animated **Schematic** or geographic **Map**, a
+  play/scrub transport bar, and live readouts.
+- **Charts** — mean speed and ramp-queue time series, plus a space–time speed map.
+- **Scoreboard** — the one-hour outcome for all three strategies, with a verdict.
+- **How ALINEA & HERO work** (top-right) — a full explainer with a live
+  fundamental diagram and control-loop diagrams.
+
+![Info screen with the fundamental diagram](img/info.png)
+
+## Choosing what to run
+
+- **Corridor** — click a card. Cards marked **sample** are representative example
+  networks; your own corridors appear here too (see the Integration Guide).
+- **Scenario tabs** (above the stage) — *No control*, *Local ALINEA*, *HERO
+  coordinated*. This picks which run drives the animation and readouts.
+- **Enable VSL** (left panel) — layers variable speed limits on top of the
+  current scenario; the scoreboard switches to the "with VSL" comparison.
+
+## Controls
+
+| Control | What it does |
+|---|---|
+| **Traffic demand level** | Scales all demand (60–130 %). Push it up to force a breakdown. |
+| **Regulator gain K_R** | ALINEA's responsiveness. Higher = faster correction, but jumpier. |
+| **Target occupancy ô** | The occupancy ALINEA aims to hold — set near critical for max flow. |
+| **Control period** | How often the metering rate is recomputed (seconds). |
+| **HERO recruit threshold** | How full a bottleneck ramp gets before it recruits upstream ramps. |
+| **VSL feedback gain** | How aggressively speed limits drop upstream of the bottleneck. |
+
+Any change re-runs the simulation automatically.
+
+## Reading the schematic
+
+- The **road** is coloured by speed — green (free-flow) to red (slow). Lane drops
+  make the road narrower. Speed-limit zones are labelled along the top.
+- **Vehicles** flow left→right and naturally bunch where the model slows down.
+- Each **on-ramp** shows a metering signal and a growing **queue** of red
+  vehicles; **off-ramps** are drawn as exit arrows.
+- The **bottleneck** detector is marked with a dashed line.
+- The legend under the road decodes the colours and the meter/queue markers.
+
+## Reading the map
+
+The **Map** tab shows the corridor alignment with a marker at each on-ramp that
+recolours by live speed and grows with queue length. It needs an internet
+connection for the map tiles; the Schematic view works offline.
+
+![Map view](img/map.png)
+
+## Charts and readouts
+
+- **Mean corridor speed** and **Total vehicles queued on ramps** — plotted for
+  all three strategies at once, with a moving time cursor.
+- **Space–time speed map** — rows are points down the corridor (ramps labelled),
+  left→right is time. Red diagonals are congestion waves travelling upstream.
+- **Live readouts** — mean speed, bottleneck occupancy, vehicles queued, discharge
+  flow, and the current VSL speed limit at the scrubbed time.
+
+## The scoreboard
+
+The one-hour outcome for each strategy: mean speed, % of time congested
+(< 60 km/h), bottleneck discharge, total travel time, and the peak single-ramp
+queue. The best cell in each row is flagged, and the verdict summarises HERO's
+gain over no control.
+
+> **Note on total travel time:** metering trades mainline delay for ramp-queue
+> delay, so TTT is often close between strategies unless a capacity drop is
+> avoided or VSL reduces the load. The clearest wins usually show up in **mean
+> speed** and **% time congested**. See [MODEL.md](MODEL.md#why-the-numbers-move).
+
+## Using real demand data
+
+Open **Demand data → Template** to download a CSV pre-filled for the current
+corridor, edit it with your counts (veh/h by minute), and **Upload CSV**. The
+caption switches to *"Demand: uploaded profile"* and the status shows how many
+ramps were matched. Click **Use built-in** to return to the synthetic profile.
+Format details are in the [Integration Guide](INTEGRATION.md#5-the-demand-csv).

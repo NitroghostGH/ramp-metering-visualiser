@@ -1,0 +1,27 @@
+{
+  "id": "bruce_m1",
+  "name": "Bruce Highway (M1)",
+  "route": "M1",
+  "direction": "Northbound to the Sunshine Coast",
+  "note": "Pine River → Caloundra Rd. 5 ramp-metering signals (TMR project).",
+  "representative": true,
+  "calibrate": true,
+  "seg_length": 1.0,
+  "sections": [
+    {"len_km": 6.0, "lanes": 3, "vlimit": 110},
+    {"len_km": 5.0, "lanes": 3, "vlimit": 110},
+    {"len_km": 4.0, "lanes": 2, "vlimit": 100}
+  ],
+  "mainline_demand": 3900,
+  "ramps": [
+    {"km": 2.0,  "name": "Dohles Rocks Rd", "demand": 800,  "kind": "on"},
+    {"km": 4.5,  "name": "Boundary Rd",     "demand": 950,  "kind": "on"},
+    {"km": 7.0,  "name": "Uhlmann Rd",      "demand": 1000, "kind": "on"},
+    {"km": 9.5,  "name": "Steve Irwin Way", "demand": 900,  "kind": "on"},
+    {"km": 12.0, "name": "Caloundra Rd",    "demand": 1050, "kind": "on"}
+  ],
+  "geo": [
+    [-27.2900, 152.9850], [-27.2200, 152.9700], [-27.1500, 152.9600],
+    [-27.0850, 152.9600], [-26.9600, 152.9950], [-26.8000, 153.0800]
+  ]
+}

@@ -1,0 +1,319 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ramp Metering Visualiser — ALINEA · HERO · VSL</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230c0f16'/%3E%3Cpath d='M16 4l10 24H6z' fill='none' stroke='%235cc8ff' stroke-width='2'/%3E%3Cline x1='16' y1='9' x2='16' y2='25' stroke='%235cc8ff' stroke-width='2' stroke-dasharray='2 3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{% static 'simulator/style.css' %}">
+  <!-- Leaflet (geographic map view). Falls back gracefully if offline. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<div id="app" data-defaults='{{ defaults|safe }}' data-corridors='{{ corridors|safe }}'>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◈</span>
+      <div>
+        <h1>Ramp Metering Visualiser <span>— ALINEA · HERO · VSL</span></h1>
+        <p class="sub">Simulate and compare ramp-metering strategies on any motorway corridor</p>
+      </div>
+    </div>
+    <button id="btn-info" class="ghost">◉ How ALINEA &amp; HERO work</button>
+  </header>
+
+  <main class="grid">
+
+    <!-- Controls -->
+    <aside class="panel controls">
+      <h2 class="panel-title">Corridor</h2>
+      <div id="corridor-list" class="corridor-list"></div>
+
+      <h2 class="panel-title">Demand</h2>
+      <div class="ctrl">
+        <label>Traffic demand level <output id="v-demand_level"></output></label>
+        <input type="range" id="demand_level" min="60" max="130" step="2">
+      </div>
+
+      <h2 class="panel-title">Controller</h2>
+      <div class="ctrl">
+        <label>Regulator gain K<sub>R</sub> <output id="v-alinea_gain"></output></label>
+        <input type="range" id="alinea_gain" min="10" max="200" step="5">
+      </div>
+      <div class="ctrl">
+        <label>Target occupancy &ocirc; <output id="v-target_occ"></output> <span class="unit">%</span></label>
+        <input type="range" id="target_occ" min="10" max="35" step="0.5">
+      </div>
+      <div class="ctrl">
+        <label>Control period <output id="v-control_period"></output> <span class="unit">s</span></label>
+        <input type="range" id="control_period" min="20" max="120" step="10">
+      </div>
+      <div class="ctrl">
+        <label>HERO recruit threshold <output id="v-hero_master"></output></label>
+        <input type="range" id="hero_master" min="0.15" max="0.75" step="0.05">
+      </div>
+
+      <h2 class="panel-title">Variable speed limits</h2>
+      <label class="switch">
+        <input type="checkbox" id="vsl_on"><span class="slider-sw"></span>
+        <span class="switch-label">Enable VSL (mainstream control)</span>
+      </label>
+      <div class="ctrl" style="margin-top:12px">
+        <label>VSL feedback gain <output id="v-vsl_gain"></output></label>
+        <input type="range" id="vsl_gain" min="0" max="40" step="2">
+      </div>
+
+      <h2 class="panel-title">Demand data</h2>
+      <div class="data-box">
+        <div class="data-status" id="data-status">Using the built-in AM-peak profile.</div>
+        <div class="data-actions">
+          <label class="filebtn">Upload CSV<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label>
+          <button class="ghost sm" id="csv-template">Template</button>
+          <button class="ghost sm hidden" id="csv-clear">Use built-in</button>
+        </div>
+        <p class="data-hint">CSV columns: <code>time_min, mainline, &lt;ramp names…&gt;</code> in veh/h.
+          Download a template pre-filled for this corridor. <a href="#" id="open-data-help">How data is used →</a></p>
+      </div>
+
+      <p class="hint">Any change re-runs the simulation automatically.</p>
+    </aside>
+
+    <!-- Stage -->
+    <section class="panel stage">
+      <div class="stage-head">
+        <div class="scenario-tabs" id="scenario-tabs">
+          <button data-scn="none" class="active">No control</button>
+          <button data-scn="alinea">Local ALINEA</button>
+          <button data-scn="hero">HERO coordinated</button>
+        </div>
+        <div class="view-toggle" id="view-toggle">
+          <button data-view="schematic" class="active">Schematic</button>
+          <button data-view="map">Map</button>
+        </div>
+      </div>
+
+      <div class="corridor-caption" id="corridor-caption"></div>
+
+      <div id="view-schematic">
+        <canvas id="road" class="road-canvas"></canvas>
+        <div class="legend">
+          <span class="legend-label">slow</span>
+          <span class="legend-bar"></span>
+          <span class="legend-label">free-flow</span>
+          <span class="legend-sep"></span>
+          <span class="legend-chip"><i class="chip-meter"></i> ramp meter</span>
+          <span class="legend-chip"><i class="chip-queue"></i> ramp queue</span>
+        </div>
+      </div>
+      <div id="view-map" class="map-wrap hidden"><div id="map"></div></div>
+
+      <div class="transport">
+        <button id="btn-play" class="play">▶</button>
+        <input type="range" id="timeline" min="0" max="100" value="0" step="1">
+        <div class="clock" id="clock">00:00</div>
+        <div class="speed-select">
+          <button data-rate="1" class="active">1&times;</button>
+          <button data-rate="4">4&times;</button>
+          <button data-rate="12">12&times;</button>
+        </div>
+      </div>
+
+      <div class="live-readout">
+        <div class="ro"><span class="ro-k">Mean corridor speed</span><span class="ro-v" id="ro-speed">–</span></div>
+        <div class="ro"><span class="ro-k">Bottleneck occupancy</span><span class="ro-v" id="ro-occ">–</span></div>
+        <div class="ro"><span class="ro-k">Vehicles queued on ramps</span><span class="ro-v" id="ro-queue">–</span></div>
+        <div class="ro"><span class="ro-k">Bottleneck discharge</span><span class="ro-v" id="ro-flow">–</span></div>
+        <div class="ro"><span class="ro-k">Speed limit (VSL)</span><span class="ro-v" id="ro-vsl">–</span></div>
+      </div>
+    </section>
+
+    <!-- Charts -->
+    <section class="panel charts">
+      <h2 class="panel-title">Time series <span class="scn-key">
+        <i class="k-none"></i>No control <i class="k-alinea"></i>ALINEA <i class="k-vsl"></i>HERO
+      </span></h2>
+      <div class="chart-grid">
+        <figure><figcaption>Mean corridor speed (km/h)</figcaption><canvas class="mini" id="c-speed"></canvas></figure>
+        <figure><figcaption>Total vehicles queued on ramps</figcaption><canvas class="mini" id="c-queue"></canvas></figure>
+      </div>
+      <figure class="heat">
+        <figcaption>Space–time speed map · <span id="heat-scn">No control</span> — rows = ramps/segments down the corridor, left→right = time. Red = slow.</figcaption>
+        <canvas class="heatmap" id="c-heat"></canvas>
+      </figure>
+    </section>
+
+    <!-- Scoreboard -->
+    <section class="panel scoreboard">
+      <h2 class="panel-title">Outcome after 1 hour <span id="score-vsl-note"></span></h2>
+      <table id="scoretable">
+        <thead>
+          <tr><th>Metric</th><th class="c-none">No control</th><th class="c-alinea">Local ALINEA</th><th class="c-vsl">HERO</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Mean corridor speed (km/h)</td><td id="s-speed-none">–</td><td id="s-speed-alinea">–</td><td id="s-speed-hero">–</td></tr>
+          <tr><td>Time congested (&lt;60 km/h)</td><td id="s-cong-none">–</td><td id="s-cong-alinea">–</td><td id="s-cong-hero">–</td></tr>
+          <tr><td>Bottleneck discharge (veh/h)</td><td id="s-flow-none">–</td><td id="s-flow-alinea">–</td><td id="s-flow-hero">–</td></tr>
+          <tr><td>Total travel time (veh&middot;h)</td><td id="s-ttt-none">–</td><td id="s-ttt-alinea">–</td><td id="s-ttt-hero">–</td></tr>
+          <tr><td>Peak single-ramp queue (veh)</td><td id="s-queue-none">–</td><td id="s-queue-alinea">–</td><td id="s-queue-hero">–</td></tr>
+        </tbody>
+      </table>
+      <p class="verdict" id="verdict"></p>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <span>METANET macroscopic model · local ALINEA · HERO-style coordination · feedback VSL · Django backend.</span>
+    <span>Papageorgiou (1991) · Papamichail &amp; Papageorgiou (2010) · Faulkner et&nbsp;al. (2014).</span>
+  </footer>
+</div>
+
+<!-- ===================== INFO MODAL ===================== -->
+<div id="info-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="How ALINEA and HERO work">
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-panel">
+    <button class="modal-close" data-close aria-label="Close">✕</button>
+
+    <nav class="modal-nav">
+      <a href="#sec-intro" class="active">Overview</a>
+      <a href="#sec-fd">Fundamental diagram</a>
+      <a href="#sec-alinea">ALINEA</a>
+      <a href="#sec-hero">HERO</a>
+      <a href="#sec-vsl">VSL</a>
+      <a href="#sec-qld">In Queensland</a>
+      <a href="#sec-data">Your own data</a>
+    </nav>
+
+    <div class="modal-body" id="modal-body">
+      <section id="sec-intro">
+        <h2>Ramp metering, in one minute</h2>
+        <p>A freeway carries the <b>most</b> traffic when its density sits right at a
+        <b>critical</b> value. Let too many vehicles in and it tips past that point:
+        speeds collapse, and — counter-intuitively — the number of vehicles that
+        actually get through <i>drops</i>. That is a <b>capacity drop</b>, and once a
+        bottleneck breaks down the jam spills back for kilometres.</p>
+        <p><b>Ramp metering</b> puts a traffic signal on each on-ramp and releases
+        vehicles at a controlled rate, keeping the merge just below the tipping point.
+        This tool compares three strategies on real Queensland corridors:
+        <b>no control</b>, local <b>ALINEA</b>, and coordinated <b>HERO</b> — optionally
+        with <b>variable speed limits</b>.</p>
+        <div class="callout">Open this while the simulation runs — switch scenarios and
+        watch the road, the queues and the space–time map respond.</div>
+      </section>
+
+      <section id="sec-fd">
+        <h2>The fundamental diagram</h2>
+        <p>Flow (veh/h) versus density (veh/km/lane). Up to the <b>critical density</b>
+        the road is in <span class="tag free">free-flow</span> and flow rises with
+        density. Past it the road is <span class="tag cong">congested</span>: adding
+        vehicles only lowers speed and flow. Metering aims to hold the operating point
+        near the peak — the <b>critical occupancy</b> target&nbsp;ô.</p>
+        <canvas id="fd-canvas" class="fd-canvas"></canvas>
+        <p class="cap">Occupancy (what loop detectors measure) is proportional to
+        density, so “target occupancy” and “critical density” are the same idea in
+        different units.</p>
+      </section>
+
+      <section id="sec-alinea">
+        <h2>ALINEA — local feedback metering</h2>
+        <div class="formula big">r<sub>j</sub>(k) = r<sub>j</sub>(k&minus;1) + K<sub>R</sub> · ( &ocirc; &minus; o<sub>j</sub>(k) )</div>
+        <p>ALINEA (<i>Asservissement LINéaire d'Entrée Autoroutière</i>,
+        Papageorgiou et&nbsp;al. 1991) is a simple <b>integral feedback</b> controller.
+        Every control period each on-ramp measures the occupancy <b>o<sub>j</sub></b>
+        just downstream of its merge and nudges its metering rate <b>r<sub>j</sub></b>
+        up or down to drive that occupancy toward the target <b>ô</b>.</p>
+        <div class="loopdiagram">
+          <div class="node road">Freeway<br><small>merge + downstream</small></div>
+          <div class="arrow">→<span>occupancy o<sub>j</sub></span></div>
+          <div class="node sensor">Detector</div>
+          <div class="arrow">→<span>error ô − o<sub>j</sub></span></div>
+          <div class="node ctrl">ALINEA<br><small>integrator, gain K<sub>R</sub></small></div>
+          <div class="arrow">→<span>rate r<sub>j</sub></span></div>
+          <div class="node meter">Ramp signal</div>
+          <div class="feedback">↑ meters the on-ramp inflow — closing the loop ↑</div>
+        </div>
+        <ul class="klist">
+          <li><b>K<sub>R</sub></b> — regulator gain (larger = faster but jumpier). Try the slider.</li>
+          <li><b>ô</b> — target occupancy at capacity (~critical density).</li>
+          <li><b>r<sub>min</sub>, r<sub>max</sub></b> — the rate is clamped so the ramp never fully stops or floods.</li>
+        </ul>
+        <p>It is local, model-free, provably stable and has been field-proven for
+        decades — which is exactly why it is the base layer of most managed motorways.</p>
+      </section>
+
+      <section id="sec-hero">
+        <h2>HERO — coordinated metering</h2>
+        <p>Local ALINEA is <b>greedy</b>. The ramp nearest a bottleneck fills its short
+        storage first; once it is about to spill back onto the surface street it is
+        forced to release — and the bottleneck breaks down anyway, while upstream ramps
+        still had empty storage they never used.</p>
+        <p><b>HERO</b> (Papamichail &amp; Papageorgiou, Monash Freeway 2008) keeps every
+        ramp on ALINEA but adds a light-touch <b>coordination</b> layer. When an active
+        bottleneck ramp starts to fill, it becomes a <b>master</b> and <b>recruits
+        upstream ramps</b> to hold vehicles back too, balancing how full each ramp's
+        queue is. Storage is shared across the whole group, so no single ramp overflows
+        and the bottleneck stays protected for longer.</p>
+        <div class="herodiagram">
+          <div class="hero-flow">traffic flow ▸</div>
+          <div class="hero-ramps">
+            <div class="hr"><span class="hr-store s1"></span><span class="hr-name">upstream</span><span class="hr-role">recruited</span></div>
+            <div class="hr"><span class="hr-store s2"></span><span class="hr-name">middle</span><span class="hr-role">recruited</span></div>
+            <div class="hr"><span class="hr-store s3"></span><span class="hr-name">bottleneck ramp</span><span class="hr-role master">master</span></div>
+          </div>
+          <div class="hero-arrows">◂ ◂ recruit upstream storage ◂ ◂</div>
+          <div class="hero-bottleneck">▮ active bottleneck</div>
+        </div>
+        <p>Switch between <b>Local ALINEA</b> and <b>HERO</b> in the app and watch the
+        queues: under HERO they spread <i>upstream</i> instead of piling onto the ramp
+        nearest the bottleneck. HERO approaches the performance of full optimal control
+        while needing only real-time measurements.</p>
+      </section>
+
+      <section id="sec-vsl">
+        <h2>Variable speed limits (VSL)</h2>
+        <p>Ramp metering controls the on-ramps; <b>VSL</b> controls the <i>mainline</i>.
+        By lowering the posted speed limit upstream of a bottleneck (Mainstream Traffic
+        Flow Control), the motorway itself is gently metered — smoothing the flow into
+        the merge and buying the ramp controllers more room. In the app VSL is a second
+        feedback loop you can layer on top of any strategy.</p>
+      </section>
+
+      <section id="sec-qld">
+        <h2>In Queensland</h2>
+        <p>TMR / Transmax's <b>STREAMS Smart Motorways</b> run exactly these ALINEA /
+        HERO algorithms. HERO coordinated metering was evaluated on the <b>M1 / M3</b>
+        (Faulkner, Dekker, Gyles, Papamichail &amp; Papageorgiou, 2014); ramp signals
+        operate on the Pacific, Gateway and Logan motorways and the Bruce Highway.</p>
+        <p class="disclaimer">The corridors here are <i>representative</i> models: real
+        route, interchange, lane and speed-limit data with approximated chainages,
+        demands and geography.</p>
+      </section>
+
+      <section id="sec-data">
+        <h2>Using your own traffic data</h2>
+        <p>The <b>Demand data</b> panel lets you replace the built-in AM-peak with a real
+        demand profile. Upload a CSV like this (values in veh/h):</p>
+        <pre class="csv">time_min, mainline, Klumpp Rd, Marshall Rd, Kessels Rd
+0,   2600,  600,  700,  750
+5,   2900,  700,  820,  880
+10,  3200,  820,  950, 1010
+…</pre>
+        <p><b>time_min</b> is minutes from the start; <b>mainline</b> is the upstream
+        entry demand; each remaining column is an on-ramp, matched to the corridor by
+        name. Use <b>Template</b> to download a correctly-headed file pre-filled for the
+        selected corridor, edit it with your counts, and upload. The demand-level slider
+        still scales everything, so you can stress-test a real day.</p>
+        <div class="callout">This is the first step toward full real-data support —
+        loop-detector demand drives the model directly. Observed occupancy/speed overlays
+        for validation are a natural next addition.</div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'simulator/app.js' %}"></script>
+</body>
+</html>

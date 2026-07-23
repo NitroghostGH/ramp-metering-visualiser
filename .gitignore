@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Django
+staticfiles/
+*.sqlite3
+db.sqlite3
+media/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node (only used for optional browser-based screenshot testing)
+node_modules/
+package-lock.json
+package.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Logs & scratch
+*.log
+scratchpad/

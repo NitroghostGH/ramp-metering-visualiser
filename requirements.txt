@@ -1,0 +1,6 @@
+# Core
+Django>=5.0
+
+# Recommended for production static-file serving (optional in development;
+# settings.py degrades gracefully if it is not installed).
+whitenoise>=6.6

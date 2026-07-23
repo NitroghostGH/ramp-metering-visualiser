@@ -1,0 +1,29 @@
+{
+  "id": "my_freeway",
+  "name": "My Freeway (A99)",
+  "route": "A99",
+  "direction": "Eastbound  ·  AM peak",
+  "note": "One-line description shown under the corridor picker.",
+
+  "representative": false,
+  "calibrate": false,
+
+  "seg_length": 0.5,
+
+  "sections": [
+    {"len_km": 4.0, "lanes": 3, "vlimit": 100},
+    {"len_km": 3.0, "lanes": 2, "vlimit": 90}
+  ],
+
+  "mainline_demand": 4200,
+
+  "ramps": [
+    {"km": 1.0, "name": "First St",  "demand": 900, "kind": "on"},
+    {"km": 3.0, "name": "Second Av", "demand": 800, "kind": "on"},
+    {"km": 2.2, "name": "Exit: Mall","demand": 0,   "kind": "off", "split": 0.10}
+  ],
+
+  "geo": [
+    [-27.5000, 153.0000], [-27.4800, 153.0300], [-27.4600, 153.0600]
+  ]
+}

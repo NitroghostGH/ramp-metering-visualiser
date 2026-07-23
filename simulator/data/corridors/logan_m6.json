@@ -1,0 +1,28 @@
+{
+  "id": "logan_m6",
+  "name": "Logan Motorway (M6)",
+  "route": "M6",
+  "direction": "Eastbound  ·  Gailes → Loganholme",
+  "note": "Western Brisbane orbital freight/commuter route.",
+  "representative": true,
+  "calibrate": true,
+  "seg_length": 0.8,
+  "sections": [
+    {"len_km": 4.8, "lanes": 2, "vlimit": 100},
+    {"len_km": 4.8, "lanes": 3, "vlimit": 100},
+    {"len_km": 4.0, "lanes": 2, "vlimit": 100}
+  ],
+  "mainline_demand": 3000,
+  "ramps": [
+    {"km": 1.6,  "name": "Ipswich Mwy (M7)",  "demand": 1100, "kind": "on"},
+    {"km": 3.6,  "name": "Wembley Rd",         "demand": 850,  "kind": "on"},
+    {"km": 6.4,  "name": "Paradise Rd",        "demand": 900,  "kind": "on"},
+    {"km": 8.8,  "name": "Beaudesert Rd",      "demand": 950,  "kind": "on"},
+    {"km": 7.2,  "name": "Off: Kingston Rd",   "demand": 0,    "kind": "off", "split": 0.10},
+    {"km": 10.8, "name": "Pacific Mwy (M1)",   "demand": 1000, "kind": "on"}
+  ],
+  "geo": [
+    [-27.6000, 152.9000], [-27.6300, 152.9600], [-27.6500, 153.0100],
+    [-27.6650, 153.0800], [-27.6750, 153.1400], [-27.6800, 153.1900]
+  ]
+}

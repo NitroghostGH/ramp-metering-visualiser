@@ -1,0 +1,30 @@
+{
+  "id": "pacific_m3",
+  "name": "Pacific Motorway (M3)",
+  "route": "M3",
+  "direction": "Northbound to Brisbane CBD  ·  AM peak",
+  "note": "Eight Mile Plains → Riverside Expressway. HERO-evaluated corridor.",
+  "representative": true,
+  "calibrate": true,
+  "seg_length": 0.6,
+  "sections": [
+    {"len_km": 3.0, "lanes": 4, "vlimit": 100},
+    {"len_km": 4.2, "lanes": 4, "vlimit": 100},
+    {"len_km": 3.0, "lanes": 3, "vlimit": 90},
+    {"len_km": 2.4, "lanes": 3, "vlimit": 80}
+  ],
+  "mainline_demand": 4600,
+  "ramps": [
+    {"km": 1.4,  "name": "Klumpp Rd",             "demand": 900,  "kind": "on"},
+    {"km": 3.0,  "name": "Marshall Rd",           "demand": 1050, "kind": "on"},
+    {"km": 4.6,  "name": "Kessels Rd",            "demand": 1150, "kind": "on"},
+    {"km": 6.0,  "name": "Holland Rd (Griffith)", "demand": 950,  "kind": "on"},
+    {"km": 8.2,  "name": "Logan Rd",              "demand": 1000, "kind": "on"},
+    {"km": 5.2,  "name": "Off: Mains Rd",         "demand": 0,    "kind": "off", "split": 0.10},
+    {"km": 10.4, "name": "O'Keefe St",            "demand": 850,  "kind": "on"}
+  ],
+  "geo": [
+    [-27.5782, 153.0905], [-27.5560, 153.0790], [-27.5300, 153.0650],
+    [-27.5130, 153.0520], [-27.4980, 153.0380], [-27.4760, 153.0210]
+  ]
+}

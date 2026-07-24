@@ -41,7 +41,7 @@ class Physics:
     cap_drop: float = 0.13        # capacity drop at active bottlenecks
 
     # controllers
-    alinea_gain: float = 70.0     # K_R (veh/h)
+    alinea_gain: float = 70.0     # K_R (veh/h per %-occupancy)
     control_period: float = 60.0  # s
     r_min: float = 240.0          # veh/h
     ramp_capacity: float = 1600.0 # veh/h (metered max per ramp)
@@ -325,12 +325,13 @@ class Simulation:
             veh += self.w_main + sum(self.w)
             total_tt += veh * (p.T / 3600.0)
 
-            mean_v = sum(self.v[i] * self.rho[i] for i in range(N))
-            dens = sum(self.rho) or 1.0
+            # space-mean speed, weighted by vehicle count (density x lanes)
+            mean_num = sum(self.v[i] * self.rho[i] * self.lanes[i] for i in range(N))
+            dens = sum(self.rho[i] * self.lanes[i] for i in range(N)) or 1.0
             rec["t"].append(round(t, 1))
             rec["flow_out"].append(round(q_out, 1))
             rec["flow_in"].append(round(q_main_in, 1))
-            rec["mean_speed_t"].append(round(mean_v / dens, 2))
+            rec["mean_speed_t"].append(round(mean_num / dens, 2))
             rec["veh_total"].append(round(veh, 1))
             rec["vsl"].append(round(self.vsl_limit, 1))
             rec["main_queue"].append(round(self.w_main, 1))

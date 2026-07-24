@@ -155,6 +155,12 @@ def build(cid):
     length_km = sum(s["len_km"] for s in c["sections"])
     n = max(4, int(round(length_km / L)))
 
+    # Numerical stability (CFL): the 10 s time step needs L >= v_free*T.
+    # At v_free=110 km/h, T=10 s that is ~0.31 km; warn below a 0.35 km margin.
+    if L < 0.35:
+        print(f"[corridors] {cid}: seg_length={L} km is small for the 10 s step "
+              f"(CFL ~0.31 km); the solver may be unstable.", file=sys.stderr)
+
     # expand sections into per-segment lane / speed-limit arrays
     marks, cum = [], 0.0
     for s in c["sections"]:

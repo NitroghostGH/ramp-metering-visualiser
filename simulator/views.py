@@ -157,7 +157,7 @@ def simulate(request):
                      for r in corridor["on_ramps"]],
         "geo": corridor["geo"],
         "target_occupancy": round(p.target_occupancy, 2),
-        "rho_crit": p.rho_crit, "rho_max": p.rho_max, "v_free": p.v_free,
+        "rho_crit": p.rho_crit, "rho_max": p.rho_max, "v_free": p.v_free, "a_fd": p.a_fd,
         "step": p.T, "horizon": p.horizon, "demand_level": level,
         "demand_source": "uploaded" if profile else "synthetic",
     }

@@ -17,7 +17,12 @@ V(ρ) = min( v_free · exp[ −(1/a) · (ρ / ρ_crit)^a ] ,  V_lim )
 Flow is `q = ρ · v · λ` (λ = lanes). Flow peaks at the **critical density**
 `ρ_crit`; beyond it the road is congested and flow falls. Loop-detector
 **occupancy** is proportional to density (`occ = 100 · ρ / ρ_jam`), so "target
-occupancy" and "critical density" are the same idea in different units.
+occupancy" and "critical density" are the same idea in different units. This is a
+first-order approximation: it assumes occupancy is linear in density and reaches
+100% at jam density (i.e. constant effective vehicle length and negligible
+detector length). It is standard for teaching; a site model would calibrate the
+exact `occ = ρ · (L_veh + L_det)` relation. With the defaults, target occupancy
+is `100 · 33.5 / 180 ≈ 18.6%`.
 
 Defaults: `v_free = 110 km/h`, `ρ_crit = 33.5`, `ρ_jam = 180 veh/km/lane`,
 `a = 1.867` — representative motorway values; adjust in `engine.py`.
@@ -42,6 +47,10 @@ v_i(k+1) = v_i(k)
          − (φ·T·Δλ·ρ_i·v_i²)/(L·λ_i·ρ_crit)              lane drop
 ```
 
+Off-ramps are handled by draining the split fraction from a segment's **outflow**
+(`q_next_i = q_i·(1 − β_i)`) rather than as a separate `−s_i` source term; the two
+formulations are equivalent and conservative.
+
 The mainline entry and every on-ramp are **origin queues**: demand that exceeds
 what the downstream segment can receive waits in a queue rather than vanishing,
 so you can see queues build and clear.
@@ -63,10 +72,12 @@ period:
 r_j(k) = r_j(k−1) + K_R · ( ô − o_j(k) )
 ```
 
-- `r_j` — metering rate (veh/h), clamped to `[r_min, r_max]`.
+- `r_j` — metering rate (veh/h), clamped to `[r_min, r_max]`. The default
+  `r_max = 1600 veh/h` assumes a multi-lane metered ramp; a single metered lane
+  saturates nearer ~900 veh/h.
 - `ô` — target occupancy (≈ critical), `o_j` — measured occupancy just downstream
   of ramp `j`.
-- `K_R` — regulator gain (default 70 veh/h).
+- `K_R` — regulator gain (default 70 veh/h per %-occupancy).
 
 Holding occupancy at `ô` keeps the merge on the free-flow branch. A local
 override releases a ramp whose queue is about to overflow its storage.

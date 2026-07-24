@@ -515,7 +515,8 @@ function initModal(){
 function drawFD(){
   const cv=document.getElementById("fd-canvas"); if(!cv) return;
   const {ctx,w,h}=setupCanvas(cv); ctx.clearRect(0,0,w,h);
-  const vf=(DATA?DATA.meta.v_free:110), rc=(DATA?DATA.meta.rho_crit:33.5), a=1.867, rmax=180;
+  const vf=(DATA?DATA.meta.v_free:110), rc=(DATA?DATA.meta.rho_crit:33.5),
+        a=(DATA?DATA.meta.a_fd:1.867), rmax=(DATA?DATA.meta.rho_max:180);
   const pad={l:44,r:12,t:14,b:26}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
   const V=r=>vf*Math.exp(-(1/a)*Math.pow(r/rc,a));
   const qmax=rc*V(rc)*1.15;

@@ -194,7 +194,7 @@ function drawMini(id, pick, opts){
   if(!DATA) return;
   const suffix=vslOn?"_vsl":"";
   const series=["none","alinea","hero"].map(c=>({color:COLORS[c],data:pick(c+suffix)}));
-  const pad={l:34,r:8,t:10,b:14}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
+  const pad={l:34,r:8,t:10,b:22}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
   let ymax=-Infinity,ymin=Infinity;
   for(const s of series) for(const v of s.data){ if(v>ymax)ymax=v; if(v<ymin)ymin=v; }
   ymin=Math.min(ymin,0); ymax=(ymax*1.08)||1;
@@ -209,7 +209,14 @@ function drawMini(id, pick, opts){
     for(let i=0;i<n;i++){const x=X(i),y=Y(s.data[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke(); }
   const fi=Math.min(Math.floor(frame),n-1), cx=X(fi);
   ctx.strokeStyle="rgba(232,237,245,.35)";ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(cx,pad.t);ctx.lineTo(cx,h-pad.b);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,pad.t);ctx.lineTo(cx,pad.t+ih);ctx.stroke();
+  // x-axis time ticks (minutes)
+  const tot=Math.round(DATA.meta.horizon/60);
+  ctx.fillStyle="#5c6a7e"; ctx.font=MONO;
+  ctx.textAlign="left";   ctx.fillText("0", pad.l, h-5);
+  ctx.textAlign="center"; ctx.fillText(""+Math.round(tot/2), pad.l+iw/2, h-5);
+  ctx.textAlign="right";  ctx.fillText(tot+" min", w-pad.r, h-5);
+  ctx.textAlign="left";
 }
 
 function drawHeat(){

@@ -74,20 +74,25 @@ h1,h2{margin:0;font-weight:650;letter-spacing:-.01em}
 /* ---------- layout ---------- */
 .grid{
   max-width:1400px;margin:0 auto;padding:22px;
-  display:grid;gap:18px;
+  display:grid;gap:18px;align-items:start;
   grid-template-columns:290px 1fr;
   grid-template-areas:
     "controls stage"
     "controls charts"
-    "scoreboard scoreboard";
+    "controls scoreboard";
 }
 .panel{
   background:var(--panel);border:1px solid var(--line);border-radius:14px;
-  padding:18px;box-shadow:var(--shadow);
+  padding:18px;box-shadow:var(--shadow);min-width:0;
 }
-.controls{grid-area:controls;align-self:start;position:sticky;top:92px}
+.controls{grid-area:controls;align-self:start;position:sticky;top:92px;
+  max-height:calc(100vh - 108px);overflow-y:auto;overscroll-behavior:contain}
+.controls::-webkit-scrollbar{width:8px}
+.controls::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+.controls::-webkit-scrollbar-thumb:hover{background:#31404f}
 .stage{grid-area:stage}
 .charts{grid-area:charts}
+.scoreboard{overflow-x:auto}
 .scoreboard{grid-area:scoreboard}
 .panel-title{
   font-size:12px;text-transform:uppercase;letter-spacing:.09em;
@@ -343,7 +348,10 @@ pre.csv{background:#0b0f16;border:1px solid var(--line);border-radius:9px;paddin
 @media(max-width:720px){.modal-nav{display:none}.modal-body{padding:22px}}
 @media(max-width:960px){
   .grid{grid-template-columns:1fr;grid-template-areas:"controls" "stage" "charts" "scoreboard"}
-  .controls{position:static}
+  .controls{position:static;max-height:none;overflow:visible}
+  .stage-head{flex-wrap:wrap;gap:10px}
+  .scenario-tabs{flex-wrap:wrap}
+  .foot{flex-direction:column;gap:6px}
   .explainer-inner{grid-template-columns:1fr;gap:18px}
   .live-readout{grid-template-columns:repeat(2,1fr)}
   .chart-grid{grid-template-columns:1fr}

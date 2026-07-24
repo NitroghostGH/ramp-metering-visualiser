@@ -437,6 +437,7 @@ function renderFrame(){
   drawMini("c-speed", k=>DATA.results[k].mean_speed_t,{});
   drawMini("c-queue", k=>DATA.results[k].total_ramp_q,{});
   drawHeat();
+  if(!document.getElementById("info-modal").classList.contains("hidden")) drawFD();
   const R=DATA.results[scnKey()], fi=frameIdx();
   const g=(id,v)=>document.getElementById(id).textContent=v;
   g("ro-speed", R.mean_speed_t[fi].toFixed(0)+" km/h");
@@ -473,6 +474,8 @@ function togglePlay(on){
 function openInfo(sectionId){
   const m=document.getElementById("info-modal");
   m.classList.remove("hidden");
+  // if playback has finished, restart it so the operating point animates
+  if(DATA && !playing && frame >= DATA.results[scnKey()].t.length-1){ togglePlay(true); }
   drawFD();
   if(sectionId){
     const el=document.getElementById(sectionId);
@@ -530,6 +533,39 @@ function drawFD(){
   ctx.textAlign="left";  ctx.fillText("ô target", cx+10, cy-4);
   ctx.fillStyle="#54d6a0"; ctx.textAlign="left"; ctx.fillText("free-flow", pad.l+8, pad.t+ih-8);
   ctx.fillStyle="#f2607a"; ctx.textAlign="right"; ctx.fillText("congested", pad.l+iw-6, pad.t+ih-8); ctx.textAlign="left";
+
+  // --- live operating point: bottleneck segment, current frame & scenario ---
+  if(DATA){
+    const R=DATA.results[scnKey()], bs=DATA.meta.bottleneck_seg, fi=frameIdx();
+    const col=COLORS[control]||"#5cc8ff";
+    const px=r=>Math.max(pad.l,Math.min(pad.l+iw,X(r)));
+    const py=q=>Math.max(pad.t,Math.min(pad.t+ih,Y(q)));
+    // The dot rides the equilibrium curve at the live density, so it always
+    // reads as a point ON the fundamental diagram (dynamic speed overshoots
+    // would otherwise float it above capacity during transitions).
+    // fading trail over the last ~30 frames (≈5 min of model time)
+    for(let i=Math.max(0,fi-30);i<fi;i++){
+      const rho=R.seg_rho[i][bs];
+      ctx.globalAlpha=Math.max(0,0.05+0.45*(i-(fi-30))/30);
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(px(rho),py(rho*V(rho)),1.8,0,7); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    // current state
+    const rho=R.seg_rho[fi][bs], v=R.seg_v[fi][bs];
+    const x=px(rho), y=py(rho*V(rho));
+    ctx.setLineDash([2,3]); ctx.strokeStyle="rgba(232,237,245,.25)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,pad.t+ih); ctx.lineTo(x,y); ctx.lineTo(pad.l,y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.shadowColor=col; ctx.shadowBlur=11;
+    ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,6,0,7); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle="#0b0f16"; ctx.beginPath(); ctx.arc(x,y,3.3,0,7); ctx.fill();
+    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(x,y,1.6,0,7); ctx.fill();
+    // live readout, top-left of the plot
+    ctx.fillStyle=col; ctx.font=MONO; ctx.textAlign="left";
+    const side = rho>rc ? "congested" : "free-flow";
+    ctx.fillText("now · ρ "+rho.toFixed(0)+" veh/km · "+v.toFixed(0)+" km/h · "+side, pad.l+8, pad.t+12);
+  }
 }
 
 /* ------------------------------------------------------------ CSV upload */

@@ -22,7 +22,7 @@
         <p class="sub">Simulate and compare ramp-metering strategies on any motorway corridor</p>
       </div>
     </div>
-    <button id="btn-info" class="ghost">◉ How ALINEA &amp; HERO work</button>
+    <button id="btn-info" class="learn-btn">◉ Learn the algorithm</button>
   </header>
 
   <main class="grid">
@@ -178,137 +178,299 @@
     <button class="modal-close" data-close aria-label="Close">✕</button>
 
     <nav class="modal-nav">
-      <a href="#sec-intro" class="active">Overview</a>
-      <a href="#sec-fd">Fundamental diagram</a>
-      <a href="#sec-alinea">ALINEA</a>
-      <a href="#sec-hero">HERO</a>
-      <a href="#sec-vsl">VSL</a>
-      <a href="#sec-qld">In Queensland</a>
-      <a href="#sec-data">Your own data</a>
+      <p class="nav-title">Learn the algorithm</p>
+      <a href="#sec-why" class="active"><span class="nav-n">01</span> Why meter a ramp?</a>
+      <a href="#sec-fd"><span class="nav-n">02</span> Fundamental diagram</a>
+      <a href="#sec-metanet"><span class="nav-n">03</span> Modelling the flow</a>
+      <a href="#sec-alinea"><span class="nav-n">04</span> ALINEA</a>
+      <a href="#sec-hero"><span class="nav-n">05</span> HERO</a>
+      <a href="#sec-vsl"><span class="nav-n">06</span> Variable speed limits</a>
+      <a href="#sec-practice"><span class="nav-n">07</span> In practice</a>
+      <a href="#sec-symbols"><span class="nav-n">08</span> Symbol reference</a>
+      <a href="#sec-data"><span class="nav-n">09</span> Use your own data</a>
     </nav>
 
     <div class="modal-body" id="modal-body">
-      <section id="sec-intro">
-        <h2>Ramp metering, in one minute</h2>
-        <p>A freeway carries the <b>most</b> traffic when its density sits right at a
-        <b>critical</b> value. Let too many vehicles in and it tips past that point:
-        speeds collapse, and — counter-intuitively — the number of vehicles that
-        actually get through <i>drops</i>. That is a <b>capacity drop</b>, and once a
-        bottleneck breaks down the jam spills back for kilometres.</p>
-        <p><b>Ramp metering</b> puts a traffic signal on each on-ramp and releases
-        vehicles at a controlled rate, keeping the merge just below the tipping point.
-        This tool compares three strategies on real Queensland corridors:
-        <b>no control</b>, local <b>ALINEA</b>, and coordinated <b>HERO</b> — optionally
-        with <b>variable speed limits</b>.</p>
-        <div class="callout">Open this while the simulation runs — switch scenarios and
-        watch the road, the queues and the space–time map respond.</div>
+
+      <!-- 01 -->
+      <section id="sec-why">
+        <p class="eyebrow">Lesson 01 · The problem</p>
+        <h2>Why meter a ramp?</h2>
+        <p>A lane of freeway carries the <b>most</b> vehicles when its density sits right
+        at a <b>critical</b> value — around one car every 30&nbsp;m at speed. Let too many
+        in and it tips past that point: speeds collapse and, counter-intuitively, the
+        number of cars that actually get through <em>falls</em>. Traffic engineers call
+        that lost throughput the <b>capacity drop</b> — typically 10–15%. Once a
+        bottleneck breaks down, the jam spills back upstream for kilometres.</p>
+        <p><b>Ramp metering</b> puts a signal on each on-ramp and releases vehicles at a
+        controlled rate, holding the merge just below the tipping point. The trade is
+        deliberate: a short, managed queue on the ramp buys a freely-flowing mainline.</p>
+        <div class="keyrow">
+          <div class="key"><span class="key-h">No control</span>ramp runs free → merge breaks down → jam spreads</div>
+          <div class="key"><span class="key-h">Metered</span>ramp holds back → merge stays fluid → throughput kept</div>
+        </div>
+        <div class="callout">Keep this open while the simulation runs behind it. Each
+        lesson ends with a <span class="tryit-inline">Try it</span> — a control to move so
+        you can watch the idea play out.</div>
       </section>
 
+      <!-- 02 -->
       <section id="sec-fd">
+        <p class="eyebrow">Lesson 02 · The core relationship</p>
         <h2>The fundamental diagram</h2>
-        <p>Flow (veh/h) versus density (veh/km/lane). Up to the <b>critical density</b>
-        the road is in <span class="tag free">free-flow</span> and flow rises with
-        density. Past it the road is <span class="tag cong">congested</span>: adding
-        vehicles only lowers speed and flow. Metering aims to hold the operating point
-        near the peak — the <b>critical occupancy</b> target&nbsp;ô.</p>
+        <p>Everything rests on one curve: how <b>flow</b> depends on <b>density</b>. Below
+        the critical density the road is in <span class="tag free">free-flow</span> and
+        flow climbs as more cars join. Above it the road is
+        <span class="tag cong">congested</span> and flow falls. The model uses an
+        exponential speed–density law:</p>
+
+        <div class="eqn">
+          <span class="eqn-no">1</span>
+          <span class="eqn-body"><var>V</var>(<var>ρ</var>) = <var>v</var><sub>f</sub> · exp<span class="brk">[</span> −<span class="frac"><span class="num">1</span><span class="den"><var>a</var></span></span> <span class="paren">(</span><span class="frac"><span class="num"><var>ρ</var></span><span class="den"><var>ρ</var><sub>cr</sub></span></span><span class="paren">)</span><sup><var>a</var></sup> <span class="brk">]</span></span>
+          <span class="eqn-read">speed falls smoothly from free-flow as density rises</span>
+        </div>
+        <p>Flow is just speed × density × lanes, which gives the humped curve below.
+        Loop detectors don't measure density directly — they report <b>occupancy</b>, the
+        % of time a vehicle sits over the sensor, which is proportional to density:</p>
+
+        <div class="eqn-pair">
+          <div class="eqn small"><span class="eqn-no">2</span><span class="eqn-body"><var>q</var> = <var>ρ</var> · <var>V</var>(<var>ρ</var>) · <var>λ</var></span></div>
+          <div class="eqn small"><span class="eqn-no">3</span><span class="eqn-body"><var>o</var> = 100 · <span class="frac"><span class="num"><var>ρ</var></span><span class="den"><var>ρ</var><sub>jam</sub></span></span></span></div>
+        </div>
+
         <canvas id="fd-canvas" class="fd-canvas"></canvas>
-        <p class="cap">Occupancy (what loop detectors measure) is proportional to
-        density, so “target occupancy” and “critical density” are the same idea in
-        different units.</p>
+        <p class="cap">Live plot for the current corridor. The gold point is capacity —
+        the peak flow, at critical density. Metering aims to keep the operating point on
+        the green (free-flow) side of that peak.</p>
+
+        <div class="worked">
+          <span class="worked-h">Worked example · where is capacity?</span>
+          With <var>v</var><sub>f</sub> = 110, <var>ρ</var><sub>cr</sub> = 33.5 and
+          <var>a</var> = 1.867, the speed at critical density is
+          <span class="mono">110 · exp(−1/1.867) ≈ 110 × 0.585 ≈ 64 km/h</span>, so one
+          lane's capacity is <span class="mono">q ≈ 33.5 × 64 ≈ 2 150 veh/h</span>. The
+          target occupancy is <span class="mono">o = 100 × 33.5 / 180 ≈ 18.6%</span> —
+          that is the number the controllers aim for.
+        </div>
+        <div class="tryit"><span>Try it</span> Push <b>Traffic demand level</b> past
+        100% and watch the space–time map turn red as the operating point crosses the peak.</div>
       </section>
 
+      <!-- 03 -->
+      <section id="sec-metanet">
+        <p class="eyebrow">Lesson 03 · The simulation</p>
+        <h2>Modelling the flow — METANET</h2>
+        <p>The corridor is sliced into ~½&nbsp;km <b>segments</b>, each holding a density
+        <var>ρ</var><sub>i</sub> and a speed <var>v</var><sub>i</sub>, updated every
+        <var>T</var> = 10&nbsp;s. Two equations govern each segment. First, cars are
+        conserved — what flows in minus what flows out changes the density:</p>
+
+        <div class="eqn">
+          <span class="eqn-no">4</span>
+          <span class="eqn-body"><var>ρ</var><sub>i</sub>(<var>k</var>+1) = <var>ρ</var><sub>i</sub>(<var>k</var>) + <span class="frac"><span class="num"><var>T</var></span><span class="den"><var>L</var> <var>λ</var><sub>i</sub></span></span> <span class="brk">[</span> <var>q</var><sub>i−1</sub> − <var>q</var><sub>i</sub> + <var>r</var><sub>i</sub> − <var>s</var><sub>i</sub> <span class="brk">]</span></span>
+          <span class="eqn-read">density change = (inflow − outflow + on-ramp − off-ramp) over the segment</span>
+        </div>
+
+        <p>Second, speed relaxes toward the fundamental-diagram value while reacting to
+        what's ahead. Each coloured term does one job:</p>
+
+        <div class="eqn tall">
+          <span class="eqn-no">5</span>
+          <span class="eqn-body"><var>v</var><sub>i</sub>(<var>k</var>+1) = <var>v</var><sub>i</sub>(<var>k</var>)
+            <span class="t t-relax">+ <span class="frac"><span class="num"><var>T</var></span><span class="den"><var>τ</var></span></span>[<var>V</var>(<var>ρ</var><sub>i</sub>) − <var>v</var><sub>i</sub>]</span>
+            <span class="t t-conv">+ <span class="frac"><span class="num"><var>T</var> <var>v</var><sub>i</sub></span><span class="den"><var>L</var></span></span>[<var>v</var><sub>i−1</sub> − <var>v</var><sub>i</sub>]</span>
+            <span class="t t-antic">− <span class="frac"><span class="num"><var>νT</var></span><span class="den"><var>τL</var></span></span> · <span class="frac"><span class="num"><var>ρ</var><sub>i+1</sub> − <var>ρ</var><sub>i</sub></span><span class="den"><var>ρ</var><sub>i</sub> + <var>κ</var></span></span></span>
+          </span>
+        </div>
+        <ul class="termkey">
+          <li><span class="dot d-relax"></span><b>Relaxation</b> — pulls speed toward the equilibrium <var>V</var>(<var>ρ</var>) over time <var>τ</var>.</li>
+          <li><span class="dot d-conv"></span><b>Convection</b> — carries the speed of the segment upstream into this one.</li>
+          <li><span class="dot d-antic"></span><b>Anticipation</b> — drivers slow for higher density <em>ahead</em>.</li>
+        </ul>
+        <p>Two more terms (not shown) add the local slow-down where an on-ramp
+        <b>merges</b> and where a <b>lane drops</b>. When a bottleneck is pushed past
+        critical, its discharge is capped below capacity — that is the
+        <b>capacity drop</b> of Lesson 01, and the reason metering pays off.</p>
+      </section>
+
+      <!-- 04 -->
       <section id="sec-alinea">
-        <h2>ALINEA — local feedback metering</h2>
-        <div class="formula big">r<sub>j</sub>(k) = r<sub>j</sub>(k&minus;1) + K<sub>R</sub> · ( &ocirc; &minus; o<sub>j</sub>(k) )</div>
-        <p>ALINEA (<i>Asservissement LINéaire d'Entrée Autoroutière</i>,
-        Papageorgiou et&nbsp;al. 1991) is a simple <b>integral feedback</b> controller.
-        Every control period each on-ramp measures the occupancy <b>o<sub>j</sub></b>
-        just downstream of its merge and nudges its metering rate <b>r<sub>j</sub></b>
-        up or down to drive that occupancy toward the target <b>ô</b>.</p>
+        <p class="eyebrow">Lesson 04 · Local control</p>
+        <h2>ALINEA</h2>
+        <p><i>Asservissement Linéaire d'Entrée Autoroutière</i> — Papageorgiou et&nbsp;al.,
+        1991. Each on-ramp runs its own <b>integral feedback</b> loop: measure the
+        occupancy just downstream, compare to target, and nudge the release rate to close
+        the gap.</p>
+
+        <div class="eqn accent-alinea">
+          <span class="eqn-no">6</span>
+          <span class="eqn-body"><var>r</var><sub>j</sub>(<var>k</var>) = <var>r</var><sub>j</sub>(<var>k</var>−1) + <var>K</var><sub>R</sub> · <span class="paren">(</span> <var>ô</var> − <var>o</var><sub>j</sub>(<var>k</var>) <span class="paren">)</span></span>
+          <span class="eqn-read">new rate = last rate + gain × (target − measured occupancy)</span>
+        </div>
+
         <div class="loopdiagram">
           <div class="node road">Freeway<br><small>merge + downstream</small></div>
-          <div class="arrow">→<span>occupancy o<sub>j</sub></span></div>
+          <div class="arrow">→<span>occupancy <var>o</var><sub>j</sub></span></div>
           <div class="node sensor">Detector</div>
-          <div class="arrow">→<span>error ô − o<sub>j</sub></span></div>
-          <div class="node ctrl">ALINEA<br><small>integrator, gain K<sub>R</sub></small></div>
-          <div class="arrow">→<span>rate r<sub>j</sub></span></div>
+          <div class="arrow">→<span>error <var>ô</var> − <var>o</var><sub>j</sub></span></div>
+          <div class="node ctrl">ALINEA<br><small>integrator, gain <var>K</var><sub>R</sub></small></div>
+          <div class="arrow">→<span>rate <var>r</var><sub>j</sub></span></div>
           <div class="node meter">Ramp signal</div>
           <div class="feedback">↑ meters the on-ramp inflow — closing the loop ↑</div>
         </div>
-        <ul class="klist">
-          <li><b>K<sub>R</sub></b> — regulator gain (larger = faster but jumpier). Try the slider.</li>
-          <li><b>ô</b> — target occupancy at capacity (~critical density).</li>
-          <li><b>r<sub>min</sub>, r<sub>max</sub></b> — the rate is clamped so the ramp never fully stops or floods.</li>
-        </ul>
-        <p>It is local, model-free, provably stable and has been field-proven for
-        decades — which is exactly why it is the base layer of most managed motorways.</p>
+
+        <div class="terms">
+          <div><dt><var>r</var><sub>j</sub></dt><dd>metering rate for ramp <var>j</var> · veh/h · clamped to [<var>r</var><sub>min</sub>, <var>r</var><sub>max</sub>]</dd></div>
+          <div><dt><var>ô</var></dt><dd>target occupancy (≈ critical) · %</dd></div>
+          <div><dt><var>o</var><sub>j</sub></dt><dd>occupancy measured just downstream · %</dd></div>
+          <div><dt><var>K</var><sub>R</sub></dt><dd>regulator gain · veh/h per %-point · ≈ 70</dd></div>
+        </div>
+
+        <div class="worked">
+          <span class="worked-h">Worked example · one control step</span>
+          Target <var>ô</var> = 18.5%, gain <var>K</var><sub>R</sub> = 70, last rate
+          <span class="mono">1 200 veh/h</span>.
+          <div class="worked-cases">
+            <div><span class="wc-tag cong">merge congested</span> measured <span class="mono">o = 24%</span> →
+              <span class="mono">Δr = 70 × (18.5 − 24) = −385</span> →
+              new rate <span class="mono">815 veh/h</span> — meter tightens.</div>
+            <div><span class="wc-tag free">merge flowing</span> measured <span class="mono">o = 14%</span> →
+              <span class="mono">Δr = 70 × (18.5 − 14) = +315</span> →
+              new rate <span class="mono">1 515 veh/h</span> — meter opens.</div>
+          </div>
+          The integral form means small errors keep nudging the rate until occupancy sits
+          exactly on target. It is model-free, provably stable, and field-proven — which is
+          why it's the base layer of most managed motorways.
+        </div>
+        <div class="tryit"><span>Try it</span> On the <b>Local ALINEA</b> tab, drop
+        <b>Target occupancy ô</b> and watch every ramp meter harder and the mainline speed
+        up. Raise <b>Regulator gain K<sub>R</sub></b> to see the rate react faster but
+        hunt around the target.</div>
       </section>
 
+      <!-- 05 -->
       <section id="sec-hero">
-        <h2>HERO — coordinated metering</h2>
-        <p>Local ALINEA is <b>greedy</b>. The ramp nearest a bottleneck fills its short
-        storage first; once it is about to spill back onto the surface street it is
-        forced to release — and the bottleneck breaks down anyway, while upstream ramps
-        still had empty storage they never used.</p>
-        <p><b>HERO</b> (Papamichail &amp; Papageorgiou, Monash Freeway 2008) keeps every
-        ramp on ALINEA but adds a light-touch <b>coordination</b> layer. When an active
-        bottleneck ramp starts to fill, it becomes a <b>master</b> and <b>recruits
-        upstream ramps</b> to hold vehicles back too, balancing how full each ramp's
-        queue is. Storage is shared across the whole group, so no single ramp overflows
-        and the bottleneck stays protected for longer.</p>
+        <p class="eyebrow">Lesson 05 · Coordinated control</p>
+        <h2>HERO</h2>
+        <p>Local ALINEA is <b>greedy</b>: the ramp nearest the bottleneck fills its short
+        storage first and, once it's about to spill onto the surface street, is forced to
+        release — so the bottleneck breaks down anyway, while upstream ramps still had
+        empty storage. <b>HERO</b> (Papamichail &amp; Papageorgiou, Monash Freeway 2008)
+        keeps every ramp on ALINEA but shares the storage. Each ramp tracks a
+        <b>fill ratio</b>:</p>
+
+        <div class="eqn accent-hero">
+          <span class="eqn-no">7</span>
+          <span class="eqn-body"><var>f</var><sub>j</sub> = <span class="frac"><span class="num"><var>w</var><sub>j</sub></span><span class="den"><var>w</var><sub>j</sub><sup>max</sup></span></span></span>
+          <span class="eqn-read">how full ramp <var>j</var>'s queue is, from 0 (empty) to 1 (about to spill)</span>
+        </div>
+
+        <ol class="steps">
+          <li>Every ramp computes its own ALINEA rate (Eq.&nbsp;6).</li>
+          <li>A ramp whose occupancy is at target <em>and</em> whose fill ratio exceeds the
+            <b>recruit threshold</b> becomes the <b>master</b>.</li>
+          <li>The master <b>recruits</b> the nearest upstream ramp, tightening its rate so
+            its fill ratio rises to match — spreading the queue upstream.</li>
+          <li>Any ramp truly at its limit is released, so nothing spills onto the arterial.</li>
+        </ol>
+
         <div class="herodiagram">
           <div class="hero-flow">traffic flow ▸</div>
           <div class="hero-ramps">
-            <div class="hr"><span class="hr-store s1"></span><span class="hr-name">upstream</span><span class="hr-role">recruited</span></div>
-            <div class="hr"><span class="hr-store s2"></span><span class="hr-name">middle</span><span class="hr-role">recruited</span></div>
-            <div class="hr"><span class="hr-store s3"></span><span class="hr-name">bottleneck ramp</span><span class="hr-role master">master</span></div>
+            <div class="hr"><span class="hr-store s1"></span><span class="hr-name">upstream</span><span class="hr-role">recruited · f ≈ 0.3</span></div>
+            <div class="hr"><span class="hr-store s2"></span><span class="hr-name">middle</span><span class="hr-role">recruited · f ≈ 0.6</span></div>
+            <div class="hr"><span class="hr-store s3"></span><span class="hr-name">bottleneck ramp</span><span class="hr-role master">master · f ≈ 0.9</span></div>
           </div>
           <div class="hero-arrows">◂ ◂ recruit upstream storage ◂ ◂</div>
           <div class="hero-bottleneck">▮ active bottleneck</div>
         </div>
-        <p>Switch between <b>Local ALINEA</b> and <b>HERO</b> in the app and watch the
-        queues: under HERO they spread <i>upstream</i> instead of piling onto the ramp
-        nearest the bottleneck. HERO approaches the performance of full optimal control
-        while needing only real-time measurements.</p>
+
+        <div class="worked">
+          <span class="worked-h">Worked example · sharing the queue</span>
+          The bottleneck ramp is nearly full (<span class="mono">f = 0.9</span>) and at
+          target occupancy → it's the master. The upstream ramp has room
+          (<span class="mono">f = 0.3</span>). Because <span class="mono">0.9 &gt; 0.4</span>
+          (the recruit threshold), HERO cuts the upstream rate so its queue grows toward
+          the master's fill. Net effect: the bottleneck ramp stops overflowing, the
+          mainline stays protected, and total delay is shared instead of dumped on one ramp.
+        </div>
+        <div class="tryit"><span>Try it</span> Flip between <b>Local ALINEA</b> and
+        <b>HERO</b> and watch the ramp queues: under HERO they spread <i>upstream</i>
+        instead of piling onto the ramp nearest the bottleneck. Lower the
+        <b>HERO recruit threshold</b> to make it share earlier.</div>
       </section>
 
+      <!-- 06 -->
       <section id="sec-vsl">
-        <h2>Variable speed limits (VSL)</h2>
+        <p class="eyebrow">Lesson 06 · Mainline control</p>
+        <h2>Variable speed limits</h2>
         <p>Ramp metering controls the on-ramps; <b>VSL</b> controls the <i>mainline</i>.
-        By lowering the posted speed limit upstream of a bottleneck (Mainstream Traffic
-        Flow Control), the motorway itself is gently metered — smoothing the flow into
-        the merge and buying the ramp controllers more room. In the app VSL is a second
-        feedback loop you can layer on top of any strategy.</p>
+        Lowering the posted limit upstream of a bottleneck (Mainstream Traffic Flow
+        Control) meters the motorway itself — thinning the flow arriving at the merge and
+        buying the ramp controllers headroom. In the model a second feedback loop lowers
+        the limit when the bottleneck occupancy runs above target, and the limit caps the
+        speed in the fundamental diagram (Eq.&nbsp;1). Layer it on top of any strategy with
+        the <b>Enable VSL</b> switch.</p>
       </section>
 
-      <section id="sec-qld">
-        <h2>In Queensland</h2>
-        <p>TMR / Transmax's <b>STREAMS Smart Motorways</b> run exactly these ALINEA /
-        HERO algorithms. HERO coordinated metering was evaluated on the <b>M1 / M3</b>
-        (Faulkner, Dekker, Gyles, Papamichail &amp; Papageorgiou, 2014); ramp signals
+      <!-- 07 -->
+      <section id="sec-practice">
+        <p class="eyebrow">Lesson 07 · The real world</p>
+        <h2>In practice</h2>
+        <p>These are not textbook toys. TMR / Transmax's <b>STREAMS Smart Motorways</b>
+        run exactly these ALINEA / HERO algorithms; HERO coordinated metering was
+        evaluated on Queensland's <b>M1 / M3</b> (Faulkner, Dekker, Gyles, Papamichail &amp;
+        Papageorgiou, 2014) after its debut on Melbourne's Monash Freeway. Ramp signals
         operate on the Pacific, Gateway and Logan motorways and the Bruce Highway.</p>
-        <p class="disclaimer">The corridors here are <i>representative</i> models: real
-        route, interchange, lane and speed-limit data with approximated chainages,
-        demands and geography.</p>
+        <ul class="refs">
+          <li>Papageorgiou, Hadj-Salem &amp; Blosseville (1991) — <i>ALINEA</i>, TRR 1320.</li>
+          <li>Kotsialos &amp; Papageorgiou (2002) — <i>METANET</i>, IEEE&nbsp;T-ITS 3(4).</li>
+          <li>Papamichail &amp; Papageorgiou (2010) — <i>HERO</i>, TRR 2178.</li>
+          <li>Faulkner et&nbsp;al. (2014) — <i>HERO on the QLD M1/M3</i>, TRR 2470.</li>
+        </ul>
+        <p class="disclaimer">The bundled corridors are <i>representative</i> models: real
+        route, interchange, lane and speed-limit data with approximated chainages, demands
+        and geography — for learning, not operational analysis.</p>
       </section>
 
+      <!-- 08 -->
+      <section id="sec-symbols">
+        <p class="eyebrow">Lesson 08 · Reference</p>
+        <h2>Symbol reference</h2>
+        <table class="symtable">
+          <thead><tr><th>Symbol</th><th>Meaning</th><th>Units</th><th>Typical</th></tr></thead>
+          <tbody>
+            <tr><td><var>ρ</var></td><td>density</td><td>veh/km/lane</td><td>—</td></tr>
+            <tr><td><var>ρ</var><sub>cr</sub></td><td>critical density (max flow)</td><td>veh/km/lane</td><td>33.5</td></tr>
+            <tr><td><var>ρ</var><sub>jam</sub></td><td>jam density (stopped)</td><td>veh/km/lane</td><td>180</td></tr>
+            <tr><td><var>v</var>, <var>v</var><sub>f</sub></td><td>speed, free-flow speed</td><td>km/h</td><td>110</td></tr>
+            <tr><td><var>q</var></td><td>flow</td><td>veh/h</td><td>—</td></tr>
+            <tr><td><var>o</var>, <var>ô</var></td><td>occupancy, target occupancy</td><td>%</td><td>18.5</td></tr>
+            <tr><td><var>r</var><sub>j</sub></td><td>ramp <var>j</var> metering rate</td><td>veh/h</td><td>240–1600</td></tr>
+            <tr><td><var>K</var><sub>R</sub></td><td>ALINEA gain</td><td>veh/h per %</td><td>70</td></tr>
+            <tr><td><var>f</var><sub>j</sub></td><td>ramp queue fill ratio</td><td>—</td><td>0–1</td></tr>
+            <tr><td><var>λ</var>, <var>L</var></td><td>lanes, segment length</td><td>—, km</td><td>2–4, 0.5</td></tr>
+            <tr><td><var>T</var>, <var>τ</var></td><td>time step, relaxation time</td><td>s</td><td>10, 18</td></tr>
+            <tr><td><var>a</var>, <var>ν</var>, <var>κ</var></td><td>FD exponent, anticipation, smoothing</td><td>—</td><td>1.87, 35, 13</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 09 -->
       <section id="sec-data">
-        <h2>Using your own traffic data</h2>
-        <p>The <b>Demand data</b> panel lets you replace the built-in AM-peak with a real
-        demand profile. Upload a CSV like this (values in veh/h):</p>
+        <p class="eyebrow">Lesson 09 · Hands-on</p>
+        <h2>Use your own data</h2>
+        <p>Replace the built-in AM-peak with a real demand profile from the
+        <b>Demand data</b> panel. Upload a CSV of counts in veh/h:</p>
         <pre class="csv">time_min, mainline, Klumpp Rd, Marshall Rd, Kessels Rd
 0,   2600,  600,  700,  750
 5,   2900,  700,  820,  880
-10,  3200,  820,  950, 1010
-…</pre>
+10,  3200,  820,  950, 1010</pre>
         <p><b>time_min</b> is minutes from the start; <b>mainline</b> is the upstream
         entry demand; each remaining column is an on-ramp, matched to the corridor by
-        name. Use <b>Template</b> to download a correctly-headed file pre-filled for the
-        selected corridor, edit it with your counts, and upload. The demand-level slider
-        still scales everything, so you can stress-test a real day.</p>
-        <div class="callout">This is the first step toward full real-data support —
-        loop-detector demand drives the model directly. Observed occupancy/speed overlays
-        for validation are a natural next addition.</div>
+        name. Use <b>Template</b> to download a correctly-headed file for the selected
+        corridor, edit it with your counts, and upload — the demand-level slider still
+        scales everything so you can stress-test a real day.</p>
       </section>
     </div>
   </div>

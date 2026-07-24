@@ -37,8 +37,10 @@ own network and feed real demand data.
 - **Geographic map** (Leaflet) with ramp markers that recolour by live speed.
 - **Space–time speed map**, mean-speed and ramp-queue charts, and an outcome
   scoreboard (speed, % time congested, discharge, total travel time, peak queue).
-- **Built-in explainer** — a "How ALINEA & HERO work" screen with a live
-  fundamental diagram and control-loop diagrams.
+- **Built-in learning tool** — a "Learn the algorithm" screen: nine numbered
+  lessons with typeset equations, worked numeric examples, a live fundamental
+  diagram, control-loop and coordination diagrams, a symbol reference, and
+  "try it" hooks that point you at the matching control in the sim.
 - **Bring your own corridor** — drop a JSON file in a folder.
 - **Bring your own data** — upload a demand CSV; it drives the model directly.
 - **No database, no build step** — pure Python + vanilla JS; runs offline

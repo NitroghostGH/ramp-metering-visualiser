@@ -525,11 +525,11 @@ function drawFD(){
   const cx=X(rc), cy=Y(rc*V(rc));
   ctx.setLineDash([3,3]); ctx.strokeStyle="#f3c14a";
   ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx,pad.t+ih);ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle="#f3c14a"; ctx.beginPath();ctx.arc(cx,cy,4,0,7);ctx.fill();
-  ctx.fillText("capacity", cx-24, cy-8);
-  ctx.fillStyle="var(--alinea)"; ctx.fillStyle="#54d6a0"; ctx.fillText("free-flow", pad.l+8, pad.t+ih-8);
+  ctx.fillStyle="#f3c14a"; ctx.beginPath();ctx.arc(cx,cy,4.5,0,7);ctx.fill();
+  ctx.textAlign="right"; ctx.fillText("capacity", cx-9, cy-4);
+  ctx.textAlign="left";  ctx.fillText("ô target", cx+10, cy-4);
+  ctx.fillStyle="#54d6a0"; ctx.textAlign="left"; ctx.fillText("free-flow", pad.l+8, pad.t+ih-8);
   ctx.fillStyle="#f2607a"; ctx.textAlign="right"; ctx.fillText("congested", pad.l+iw-6, pad.t+ih-8); ctx.textAlign="left";
-  ctx.fillStyle="#f3c14a"; ctx.fillText("← ô target", cx+8, pad.t+12);
 }
 
 /* ------------------------------------------------------------ CSV upload */

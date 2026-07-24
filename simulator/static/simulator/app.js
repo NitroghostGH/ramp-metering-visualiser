@@ -300,15 +300,36 @@ function drawRoad(){
   const kmToX=km=>marginX+rw*km/roadLen;
   const segX=i=>marginX+rw*i/m.n_segments;
 
-  // per-segment speed bands with variable lane height (lane drops = thinner road)
+  // --- road surface with a TAPERED top edge, so a lane drop reads as a merge,
+  //     not an abrupt vertical step. Control points sit at each segment centre. ---
+  const topPts=[[marginX, baseline-m.lanes[0]*lanePx]];
+  for(let i=0;i<m.n_segments;i++) topPts.push([(segX(i)+segX(i+1))/2, baseline-m.lanes[i]*lanePx]);
+  topPts.push([marginX+rw, baseline-m.lanes[m.n_segments-1]*lanePx]);
+  const topY=x=>{
+    for(let k=0;k<topPts.length-1;k++){ const a=topPts[k],bb=topPts[k+1];
+      if(x>=a[0]&&x<=bb[0]){ const t=(x-a[0])/((bb[0]-a[0])||1); return a[1]+(bb[1]-a[1])*t; } }
+    return topPts[topPts.length-1][1];
+  };
+  // speed-coloured fill per segment, following the tapered top
   for(let i=0;i<m.n_segments;i++){
-    const x0=segX(i), x1=segX(i+1), lh=m.lanes[i]*lanePx;
-    ctx.fillStyle=speedColor(V[i]); ctx.globalAlpha=0.22;
-    ctx.fillRect(x0, baseline-lh, x1-x0, lh); ctx.globalAlpha=1;
-    ctx.strokeStyle="rgba(255,255,255,.05)"; ctx.strokeRect(x0,baseline-lh,x1-x0,lh);
+    const x0=segX(i), x1=segX(i+1);
+    ctx.fillStyle=speedColor(V[i]); ctx.globalAlpha=0.24;
+    ctx.beginPath(); ctx.moveTo(x0,topY(x0)); ctx.lineTo(x1,topY(x1));
+    ctx.lineTo(x1,baseline); ctx.lineTo(x0,baseline); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha=1;
   }
-  // road top edge + baseline
-  ctx.strokeStyle="#26303f"; ctx.lineWidth=1.5;
+  // dashed lane dividers, drawn only across segments where that lane exists
+  ctx.setLineDash([9,11]); ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
+  for(let j=1;j<maxLanes;j++){ const y=baseline-j*lanePx; let run=null;
+    for(let i=0;i<=m.n_segments;i++){ const has=i<m.n_segments && m.lanes[i]>j;
+      if(has&&run===null) run=segX(i);
+      else if(!has&&run!==null){ ctx.beginPath(); ctx.moveTo(run,y); ctx.lineTo(segX(i),y); ctx.stroke(); run=null; } }
+  }
+  ctx.setLineDash([]);
+  // tapered top edge + straight baseline
+  ctx.strokeStyle="#3a4757"; ctx.lineWidth=1.5;
+  ctx.beginPath(); topPts.forEach((p,k)=>k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke();
+  ctx.strokeStyle="#26303f";
   ctx.beginPath(); ctx.moveTo(marginX,baseline); ctx.lineTo(marginX+rw,baseline); ctx.stroke();
 
   // speed-limit labels where the section changes
@@ -331,7 +352,8 @@ function drawRoad(){
   for(const c of particles){
     const seg=segAt(c.x), lanes=m.lanes[seg], lh=lanes*lanePx;
     const x=kmToX(c.x);
-    const y=baseline - (0.12+c.lf*0.76)*lh;
+    // keep vehicles below the (possibly tapered) road surface
+    const y=Math.max(baseline - (0.12+c.lf*0.76)*lh, topY(x)+3);
     ctx.fillStyle=speedColor(c.spd);
     roundRect(ctx,x-2.4,y-1.6,5,3.4,1.2); ctx.fill();
   }

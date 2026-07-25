@@ -69,6 +69,13 @@ connection for the map tiles; the Schematic view works offline.
 - Click or drag **any chart** to move the shared time cursor; hover for exact
   values. On the schematic, hover the road to inspect a segment. **Space**
   toggles play/pause and **←/→** step one minute.
+- **Pin baseline** snapshots the current run: it stays on the time-series and
+  per-ramp charts as faint lines while you change sliders, so you can see
+  exactly what a different gain, target or demand level buys you. Click the
+  blue chip to clear it (switching corridor clears it too).
+- The **Demand** section shows a live preview of the traffic entering the model
+  over the hour — mainline and total on-ramp demand, following the demand-level
+  slider and any uploaded CSV profile.
 
 ## Per-ramp detail
 

@@ -37,6 +37,8 @@
         <label>Traffic demand level <output id="v-demand_level"></output></label>
         <input type="range" id="demand_level" min="60" max="130" step="2">
       </div>
+      <canvas id="c-demand" class="demand-mini"></canvas>
+      <div class="demand-cap"><i class="dc-main"></i> mainline · <i class="dc-ramp"></i> all on-ramps (veh/h over the hour)</div>
 
       <h2 class="panel-title">Controller</h2>
       <div class="ctrl">
@@ -147,7 +149,10 @@
 
     <!-- Charts -->
     <section class="panel charts">
-      <h2 class="panel-title">Time series <span class="scn-key">
+      <h2 class="panel-title">Time series
+        <button id="btn-pin" class="pin-btn" title="Snapshot the current run — it stays on the charts as faint lines while you change settings">⊙ Pin baseline</button>
+        <button id="pin-chip" class="pin-chip hidden" title="Click to clear the pinned baseline"></button>
+        <span class="scn-key">
         <i class="k-none"></i>No control <i class="k-alinea"></i>ALINEA <i class="k-vsl"></i>HERO
       </span></h2>
       <div class="chart-grid">

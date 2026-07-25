@@ -28,6 +28,7 @@ let scrubbing = false;
 let roadHover = null;          // {x,y} cursor on the schematic canvas
 let selRamp = null;            // index into meta.on_ramps — opens the detail panel
 let rampHits = [];             // clickable ramp regions, rebuilt by drawRoad()
+let PIN = null;                // pinned baseline {results, meta, desc} for A/B ghosts
 
 // chart plot-area insets (shared between drawing and pointer hit-testing)
 const MINI_PAD = { l: 34, r: 8, t: 10, b: 22 };
@@ -68,7 +69,8 @@ function initSliders(){
     const out = document.getElementById("v-"+id);
     const show = ()=> out.textContent = (FMT[id]||(x=>x))(el.value);
     show();
-    el.addEventListener("input", ()=>{ show(); scheduleRun(); });
+    el.addEventListener("input", ()=>{ show(); scheduleRun();
+      if(id==="demand_level" && DATA) drawDemandPreview(); });
   }
   const vsl = document.getElementById("vsl_on");
   vsl.checked = vslOn;
@@ -101,6 +103,7 @@ async function run(){
     precompute();
     frame = 0; resetParticles();
     if(selRamp!=null && selRamp>=DATA.meta.on_ramps.length){ selRamp=null; }
+    if(PIN && PIN.meta.id!==DATA.meta.id) clearPin();   // baseline is per-corridor
     updateRampPanel();
     setCaption();
     buildMap();
@@ -140,6 +143,7 @@ function refreshAll(){
     b.classList.toggle("active", b.dataset.scn===control));
   fillScoreboard();
   drawCharts();
+  drawDemandPreview();
   renderFrame();
 }
 
@@ -198,9 +202,9 @@ const MONO="11px ui-monospace, Menlo, Consolas, monospace";
 
 /* ------------------------------------------------------------ charts */
 function drawCharts(){
-  drawMini("c-speed", k=>DATA.results[k].mean_speed_t, {});
-  drawMini("c-queue", k=>DATA.results[k].total_ramp_q, {});
-  drawMini("c-occ",   k=>DATA.results[k].occ_bneck,
+  drawMini("c-speed", (RS,k)=>RS[k].mean_speed_t, {});
+  drawMini("c-queue", (RS,k)=>RS[k].total_ramp_q, {});
+  drawMini("c-occ",   (RS,k)=>RS[k].occ_bneck,
            {ref:{value:DATA.meta.target_occupancy, label:"ô"}});
   drawHeat();
   if(selRamp!=null) drawRampCharts();
@@ -211,12 +215,75 @@ function drawCharts(){
    ramp's rate drops while its own merge occupancy is still below target. */
 function drawRampCharts(){
   const o=DATA.meta.on_ramps[selRamp]; if(!o) return;
-  drawMini("r-queue", k=>DATA.results[k].ramp_queue[selRamp],
+  drawMini("r-queue", (RS,k)=>RS[k].ramp_queue[selRamp],
            {ref:{value:o.storage, label:"storage", color:"#f2607a"}, refPad:1.15});
-  drawMini("r-rate",  k=>DATA.results[k].ramp_meter[selRamp],
+  drawMini("r-rate",  (RS,k)=>RS[k].ramp_meter[selRamp],
            {ref:{value:DATA.meta.ramp_capacity, label:"cap", color:"#9fb0c5"}, refPad:1.12});
-  drawMini("r-occ",   k=>DATA.results[k].ramp_occ[selRamp],
+  drawMini("r-occ",   (RS,k)=>RS[k].ramp_occ[selRamp],
            {ref:{value:DATA.meta.target_occupancy, label:"ô"}});
+}
+
+/* pinned baseline: snapshot the current run's results so slider experiments
+   ("what if K_R were higher?") show against ghost lines of the old run */
+function pinBaseline(){
+  if(!DATA) return;
+  const c=collect();
+  PIN={results:DATA.results, meta:DATA.meta,
+       desc:`K_R ${c.alinea_gain} · ô ${c.target_occ} · ${Math.round(c.demand_level*100)}%`
+            +(vslOn?" · VSL":"")};
+  updatePinUI();
+  drawCharts();
+}
+function clearPin(){ PIN=null; updatePinUI(); if(DATA) drawCharts(); }
+function updatePinUI(){
+  const chip=document.getElementById("pin-chip");
+  chip.classList.toggle("hidden",!PIN);
+  if(PIN) chip.textContent=`faint = baseline (${PIN.desc}) ✕`;
+  document.getElementById("btn-pin").textContent = PIN ? "⊙ Re-pin" : "⊙ Pin baseline";
+}
+
+/* sidebar preview of the demand entering the model (mirrors engine.demand_at) */
+function drawDemandPreview(){
+  const cv=document.getElementById("c-demand"); if(!cv) return;
+  const {ctx,w,h}=setupCanvas(cv); ctx.clearRect(0,0,w,h);
+  if(!DATA) return;
+  const m=DATA.meta, H=m.horizon;
+  const level=parseFloat(document.getElementById("demand_level").value)/100;
+  const rampBase=m.ramps.filter(r=>r.kind==="on").reduce((a,r)=>a+r.demand,0);
+  const interp=(ts,ys,t)=>{
+    if(t<=ts[0]) return ys[0];
+    if(t>=ts[ts.length-1]) return ys[ys.length-1];
+    let i=1; while(ts[i]<t) i++;
+    const f=(t-ts[i-1])/((ts[i]-ts[i-1])||1);
+    return ys[i-1]+(ys[i]-ys[i-1])*f;
+  };
+  const N=90, main=[], ramp=[];
+  for(let i=0;i<=N;i++){
+    const t=H*i/N;
+    if(demandProfile){
+      main.push(level*interp(demandProfile.time_s, demandProfile.mainline, t));
+      ramp.push(level*demandProfile.ramps.reduce((a,s)=>a+interp(demandProfile.time_s,s,t),0));
+    }else{
+      const ds=level*demandScale(t);
+      main.push(m.mainline_demand*ds);
+      ramp.push(rampBase*ds);
+    }
+  }
+  const pad={l:4,r:4,t:6,b:4}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
+  const ymax=Math.max(...main,...ramp,1)*1.1;
+  const X=i=>pad.l+iw*i/N, Y=v=>pad.t+ih*(1-v/ymax);
+  const line=(data,col,fill)=>{
+    ctx.beginPath();
+    for(let i=0;i<=N;i++){ i?ctx.lineTo(X(i),Y(data[i])):ctx.moveTo(X(i),Y(data[i])); }
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
+    if(fill){ ctx.lineTo(X(N),pad.t+ih); ctx.lineTo(X(0),pad.t+ih); ctx.closePath();
+      ctx.fillStyle=col; ctx.globalAlpha=0.10; ctx.fill(); ctx.globalAlpha=1; }
+  };
+  line(main,"#5cc8ff",true);
+  line(ramp,"#54d6a0",true);
+  ctx.font=MONO; ctx.fillStyle="#5c6a7e"; ctx.textAlign="right";
+  ctx.fillText(Math.round(Math.max(...main))+" veh/h", w-pad.r-2, 12);
+  ctx.textAlign="left";
 }
 
 function selectRamp(j){
@@ -238,10 +305,12 @@ function drawMini(id, pick, opts){
   ctx.clearRect(0,0,w,h);
   if(!DATA) return;
   const suffix=vslOn?"_vsl":"";
-  const series=["none","alinea","hero"].map(c=>({color:COLORS[c],data:pick(c+suffix)}));
+  const series=["none","alinea","hero"].map(c=>({color:COLORS[c],data:pick(DATA.results,c+suffix)}));
+  // pinned baseline drawn as faint "ghost" lines behind the live run
+  const ghosts=PIN ? ["none","alinea","hero"].map(c=>({color:COLORS[c],data:pick(PIN.results,c+suffix)})) : [];
   const pad=MINI_PAD, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
   let ymax=-Infinity,ymin=Infinity;
-  for(const s of series) for(const v of s.data){ if(v>ymax)ymax=v; if(v<ymin)ymin=v; }
+  for(const s of series.concat(ghosts)) for(const v of s.data){ if(v>ymax)ymax=v; if(v<ymin)ymin=v; }
   ymin=Math.min(ymin,0); ymax=(ymax*1.08)||1;
   if(opts.ref) ymax=Math.max(ymax, opts.ref.value*(opts.refPad||1.25));
   const n=series[0].data.length;
@@ -260,6 +329,10 @@ function drawMini(id, pick, opts){
     ctx.fillText(opts.ref.label+" "+opts.ref.value, w-pad.r-2, ry-4);
     ctx.textAlign="left";
   }
+  ctx.lineWidth=1.2; ctx.globalAlpha=0.30;
+  for(const s of ghosts){ const gn=s.data.length; ctx.strokeStyle=s.color; ctx.beginPath();
+    for(let i=0;i<gn;i++){const x=pad.l+iw*i/(gn-1),y=Y(s.data[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke(); }
+  ctx.globalAlpha=1;
   ctx.lineWidth=1.6;
   for(const s of series){ ctx.strokeStyle=s.color; ctx.beginPath();
     for(let i=0;i<n;i++){const x=X(i),y=Y(s.data[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke(); }
@@ -968,6 +1041,8 @@ function initKeyboard(){
 function initControls(){
   document.getElementById("btn-play").addEventListener("click",()=>togglePlay());
   document.getElementById("rp-close").addEventListener("click",()=>{ selRamp=null; updateRampPanel(); });
+  document.getElementById("btn-pin").addEventListener("click",pinBaseline);
+  document.getElementById("pin-chip").addEventListener("click",clearPin);
   document.getElementById("btn-info").addEventListener("click",()=>openInfo());
   document.getElementById("open-data-help").addEventListener("click",e=>{ e.preventDefault(); openInfo("sec-data"); });
   initModal();
@@ -997,7 +1072,7 @@ function initControls(){
     b.addEventListener("click",()=>{ rate=parseFloat(b.dataset.rate);
       document.querySelectorAll(".speed-select button").forEach(x=>x.classList.remove("active"));
       b.classList.add("active"); }));
-  window.addEventListener("resize",()=>{ if(DATA) renderFrame(); });
+  window.addEventListener("resize",()=>{ if(DATA){ renderFrame(); drawDemandPreview(); } });
 }
 
 initCorridors();

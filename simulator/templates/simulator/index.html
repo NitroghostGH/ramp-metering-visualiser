@@ -106,6 +106,7 @@
           <span class="legend-sep"></span>
           <span class="legend-chip"><i class="chip-meter"></i> ramp meter</span>
           <span class="legend-chip"><i class="chip-queue"></i> ramp queue</span>
+          <span class="legend-hint">hover the road to inspect · Space = play/pause · ←/→ = step 1 min</span>
         </div>
       </div>
       <div id="view-map" class="map-wrap hidden"><div id="map"></div></div>
@@ -138,6 +139,7 @@
       <div class="chart-grid">
         <figure><figcaption>Mean corridor speed (km/h)</figcaption><canvas class="mini" id="c-speed"></canvas></figure>
         <figure><figcaption>Total vehicles queued on ramps</figcaption><canvas class="mini" id="c-queue"></canvas></figure>
+        <figure><figcaption>Bottleneck occupancy (%) — dashes = target ô</figcaption><canvas class="mini" id="c-occ"></canvas></figure>
       </div>
       <figure class="heat">
         <figcaption>Space–time speed map · <span id="heat-scn">No control</span> — rows = ramps/segments down the corridor, left→right = time. Red = slow. Click or drag any chart to move the time cursor.</figcaption>

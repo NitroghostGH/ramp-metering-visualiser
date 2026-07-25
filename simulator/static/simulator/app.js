@@ -25,6 +25,7 @@ let frame = 0, playing = false, rate = 1, lastTS = 0;
 let demandProfile = null;      // uploaded {time_s, mainline, ramps} or null
 let hover = null;              // {frac:0..1, seg|null} — cursor shared by all charts
 let scrubbing = false;
+let roadHover = null;          // {x,y} cursor on the schematic canvas
 
 // chart plot-area insets (shared between drawing and pointer hit-testing)
 const MINI_PAD = { l: 34, r: 8, t: 10, b: 22 };
@@ -106,6 +107,7 @@ async function run(){
 
 // derived per-scenario arrays (total ramp queue over time)
 function precompute(){
+  const bs=DATA.meta.bottleneck_seg, rmax=DATA.meta.rho_max;
   for(const key of Object.keys(DATA.results)){
     const R = DATA.results[key];
     const n = R.t.length, nr = R.ramp_queue.length;
@@ -113,6 +115,8 @@ function precompute(){
     for(let j=0;j<nr;j++) for(let i=0;i<n;i++) tot[i]+=R.ramp_queue[j][i];
     R.total_ramp_q = tot.map(x=>Math.round(x));
     R.total_ramp_q_max = Math.max(...tot, 0);
+    // the feedback signal ALINEA regulates: occupancy at the bottleneck
+    R.occ_bneck = R.seg_rho.map(row=>100*row[bs]/rmax);
   }
 }
 
@@ -192,6 +196,8 @@ const MONO="11px ui-monospace, Menlo, Consolas, monospace";
 function drawCharts(){
   drawMini("c-speed", k=>DATA.results[k].mean_speed_t, {});
   drawMini("c-queue", k=>DATA.results[k].total_ramp_q, {});
+  drawMini("c-occ",   k=>DATA.results[k].occ_bneck,
+           {ref:{value:DATA.meta.target_occupancy, label:"ô"}});
   drawHeat();
 }
 function drawMini(id, pick, opts){
@@ -204,12 +210,23 @@ function drawMini(id, pick, opts){
   let ymax=-Infinity,ymin=Infinity;
   for(const s of series) for(const v of s.data){ if(v>ymax)ymax=v; if(v<ymin)ymin=v; }
   ymin=Math.min(ymin,0); ymax=(ymax*1.08)||1;
+  if(opts.ref) ymax=Math.max(ymax, opts.ref.value*1.25);
   const n=series[0].data.length;
   const X=i=>pad.l+iw*i/(n-1), Y=v=>pad.t+ih*(1-(v-ymin)/(ymax-ymin));
   ctx.strokeStyle="#1c2532"; ctx.fillStyle="#5c6a7e"; ctx.font=MONO; ctx.lineWidth=1;
   for(let g=0;g<=2;g++){ const val=ymin+(ymax-ymin)*g/2,y=Y(val);
     ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();
     ctx.fillText(val.toFixed(val<10?1:0),3,y+3); }
+  // dashed reference line (e.g. the ALINEA target occupancy ô)
+  if(opts.ref){
+    const ry=Y(opts.ref.value);
+    ctx.strokeStyle="rgba(243,193,74,.6)"; ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(pad.l,ry);ctx.lineTo(w-pad.r,ry);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle="#f3c14a"; ctx.textAlign="right";
+    ctx.fillText(opts.ref.label+" "+opts.ref.value, w-pad.r-2, ry-4);
+    ctx.textAlign="left";
+  }
   ctx.lineWidth=1.6;
   for(const s of series){ ctx.strokeStyle=s.color; ctx.beginPath();
     for(let i=0;i<n;i++){const x=X(i),y=Y(s.data[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke(); }
@@ -510,6 +527,22 @@ function drawRoad(){
     ctx.fillStyle="#5c6a7e"; ctx.font=MONO; ctx.textAlign="right";
     ctx.fillText(o.name.replace(/^Off:\s*/,'')+" ⤴", mx-6, baseline-lh-34); ctx.textAlign="left";
   });
+
+  // hover inspection: highlight the segment under the cursor + live readout
+  if(roadHover && roadHover.x>=marginX && roadHover.x<=marginX+rw){
+    const km=(roadHover.x-marginX)/rw*roadLen, seg=segAt(km);
+    const x0=segX(seg), x1=segX(seg+1);
+    ctx.strokeStyle="rgba(92,200,255,.55)"; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(x0,topY(x0)); ctx.lineTo(x1,topY(x1));
+    ctx.lineTo(x1,baseline); ctx.lineTo(x0,baseline); ctx.closePath(); ctx.stroke();
+    const rho=R.seg_rho[fi][seg], v=V[seg], occ=100*rho/m.rho_max;
+    const items=[["#9fb0c5","km "+km.toFixed(1)],
+                 ["#e8edf5",m.lanes[seg]+" lanes"],
+                 [speedColor(v),Math.round(v)+" km/h"],
+                 ["#9fb0c5","occ "+occ.toFixed(0)+"%"]];
+    const yr=Math.min(Math.max(roadHover.y-14,18),h-10);
+    drawReadout(ctx, items, roadHover.x, yr, marginX+2, marginX+rw);
+  }
 }
 
 function drawMeter(ctx,x,y,green){
@@ -527,7 +560,28 @@ function roundRect(ctx,x,y,w,h,r){
 }
 
 /* ------------------------------------------------------------ map (Leaflet) */
-let map=null, mapLayers=[], mapReady=false, lineBounds=null;
+let map=null, mapLayers=[], mapReady=false, lineBounds=null, segLines=[];
+
+// chord-length interpolation along the corridor polyline (mirrors corridors.py)
+function geoCum(w){
+  const d=[0];
+  for(let i=1;i<w.length;i++) d.push(d[i-1]+Math.hypot(w[i][0]-w[i-1][0], w[i][1]-w[i-1][1]));
+  return d;
+}
+function geoAt(w,cum,target){
+  for(let i=1;i<w.length;i++){ if(cum[i]>=target){
+    const t=(target-cum[i-1])/((cum[i]-cum[i-1])||1);
+    return [w[i-1][0]+(w[i][0]-w[i-1][0])*t, w[i-1][1]+(w[i][1]-w[i-1][1])*t]; } }
+  return w[w.length-1];
+}
+function geoSlice(w,cum,f0,f1){
+  const total=cum[cum.length-1]||1, a=f0*total, b=f1*total;
+  const pts=[geoAt(w,cum,a)];
+  for(let i=1;i<w.length-1;i++) if(cum[i]>a&&cum[i]<b) pts.push(w[i]);
+  pts.push(geoAt(w,cum,b));
+  return pts;
+}
+
 function buildMap(){
   if(typeof L==="undefined"){ // offline / blocked
     const el=document.getElementById("map");
@@ -536,15 +590,28 @@ function buildMap(){
   }
   const m=DATA.meta;
   if(!map){
-    map=L.map("map",{zoomControl:true,attributionControl:false});
+    map=L.map("map",{zoomControl:true,attributionControl:false,zoomSnap:0.25});
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:18}).addTo(map);
     mapReady=true;
   }
-  mapLayers.forEach(l=>map.removeLayer(l)); mapLayers=[];
-  const line=L.polyline(m.geo,{color:"#5cc8ff",weight:5,opacity:.85}).addTo(map);
-  mapLayers.push(line);
-  lineBounds=line.getBounds();
+  mapLayers.forEach(l=>map.removeLayer(l)); mapLayers=[]; segLines=[];
+  // dark casing under the live segments so colours read against any tile
+  const casing=L.polyline(m.geo,{color:"#0c1018",weight:10,opacity:.9}).addTo(map);
+  mapLayers.push(casing);
+  lineBounds=casing.getBounds();
   map.fitBounds(lineBounds,{padding:[30,30]});
+  // one polyline per model segment, recoloured live by speed
+  const cum=geoCum(m.geo), n=m.n_segments;
+  for(let i=0;i<n;i++){
+    const pl=L.polyline(geoSlice(m.geo,cum,i/n,(i+1)/n),
+                        {color:"#54d6a0",weight:6,opacity:.95}).addTo(map);
+    segLines.push(pl); mapLayers.push(pl);
+  }
+  // bottleneck detector
+  const bpos=geoAt(m.geo,cum,((m.bottleneck_seg+1)/n)*(cum[cum.length-1]||1));
+  const bk=L.circleMarker(bpos,{radius:5,color:"#5cc8ff",weight:2,fillColor:"#0c0f16",fillOpacity:1})
+    .bindTooltip("bottleneck detector",{direction:"top"}).addTo(map);
+  mapLayers.push(bk);
   // ramp markers stored for live recolour
   m.on_ramps.forEach((o,j)=>{
     const mk=L.circleMarker(o.geo,{radius:7,color:"#0c0f16",weight:2,fillOpacity:1,fillColor:"#54d6a0"})
@@ -554,10 +621,10 @@ function buildMap(){
 }
 function updateMap(){
   if(!mapReady||view!=="map"||!DATA) return;
-  const R=DATA.results[scnKey()], fi=frameIdx();
+  const R=DATA.results[scnKey()], fi=frameIdx(), V=R.seg_v[fi];
+  segLines.forEach((pl,i)=>pl.setStyle({color:speedColor(V[i])}));
   mapLayers.forEach(l=>{ if(l._rampIdx!==undefined){
-    const occ=R.ramp_occ[l._rampIdx][fi];
-    const spd=DATA.results[scnKey()].seg_v[fi][DATA.meta.on_ramps[l._rampIdx].seg];
+    const spd=V[DATA.meta.on_ramps[l._rampIdx].seg];
     l.setStyle({fillColor:speedColor(spd)});
     const q=R.ramp_queue[l._rampIdx][fi];
     l.setRadius(6+Math.min(10,q/12));
@@ -568,9 +635,7 @@ function updateMap(){
 function renderFrame(){
   if(!DATA) return;
   if(view==="schematic") drawRoad(); else updateMap();
-  drawMini("c-speed", k=>DATA.results[k].mean_speed_t,{});
-  drawMini("c-queue", k=>DATA.results[k].total_ramp_q,{});
-  drawHeat();
+  drawCharts();
   if(!document.getElementById("info-modal").classList.contains("hidden")) drawFD();
   const R=DATA.results[scnKey()], fi=frameIdx();
   const g=(id,v)=>document.getElementById(id).textContent=v;
@@ -786,7 +851,7 @@ function setFrameFrac(frac){
   frame=frac*(n-1); seedParticles(); renderFrame();
 }
 function initChartInteractions(){
-  for(const id of ["c-speed","c-queue","c-heat"]){
+  for(const id of ["c-speed","c-queue","c-occ","c-heat"]){
     const cv=document.getElementById(id);
     const pad = id==="c-heat" ? HEAT_PAD : MINI_PAD;
     const pos=ev=>{
@@ -819,6 +884,32 @@ function initChartInteractions(){
       hover=null; if(DATA && !playing) renderFrame();
     });
   }
+  // schematic road: hover to inspect the segment under the cursor
+  const road=document.getElementById("road");
+  road.addEventListener("pointermove",ev=>{
+    if(!DATA) return;
+    const r=road.getBoundingClientRect();
+    roadHover={x:ev.clientX-r.left, y:ev.clientY-r.top};
+    if(!playing) renderFrame();
+  });
+  road.addEventListener("pointerleave",()=>{
+    roadHover=null; if(DATA && !playing) renderFrame();
+  });
+}
+
+function initKeyboard(){
+  document.addEventListener("keydown",e=>{
+    if(e.target.matches("input,textarea,select,button")) return;
+    if(!document.getElementById("info-modal").classList.contains("hidden")) return;
+    if(e.key===" "){ e.preventDefault(); togglePlay(); }
+    else if((e.key==="ArrowLeft"||e.key==="ArrowRight") && DATA){
+      e.preventDefault(); togglePlay(false);
+      const n=DATA.results[scnKey()].t.length;
+      const d=(60/DATA.meta.step)*(e.key==="ArrowRight"?1:-1);   // ±1 min
+      frame=Math.max(0,Math.min(n-1,frame+d));
+      seedParticles(); renderFrame();
+    }
+  });
 }
 
 /* ------------------------------------------------------------ wiring */
@@ -860,5 +951,6 @@ initCorridors();
 initSliders();
 initControls();
 initChartInteractions();
+initKeyboard();
 requestAnimationFrame(loop);
 run();

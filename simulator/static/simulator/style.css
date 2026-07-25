@@ -171,7 +171,7 @@ input[type=range]::-moz-range-thumb{
 .scn-key{float:right;font-size:11px;color:var(--ink-faint);text-transform:none;letter-spacing:0;font-weight:400}
 .scn-key i{display:inline-block;width:11px;height:3px;border-radius:2px;margin:0 4px 0 10px;vertical-align:middle}
 .k-none{background:var(--none)}.k-alinea{background:var(--alinea)}.k-vsl{background:var(--vsl)}
-.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chart-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 figure{margin:0}
 figcaption{font-size:11.5px;color:var(--ink-dim);margin-bottom:6px}
 .mini{width:100%;height:150px;display:block;background:#0b0f16;border:1px solid var(--line);border-radius:9px}
@@ -240,9 +240,9 @@ td.best::after{content:"▲";font-size:9px;margin-left:6px;color:var(--alinea);o
   background:#090c12;border:1px solid var(--line)}
 .map-wrap{border-radius:10px;overflow:hidden;border:1px solid var(--line)}
 .map-wrap.hidden,#view-schematic.hidden{display:none}
-#map{width:100%;height:340px;background:#0b1017}
+#map{width:100%;height:480px;background:#0b1017}
 .leaflet-container{background:#0b1017}
-.map-fallback{display:flex;align-items:center;justify-content:center;height:340px;
+.map-fallback{display:flex;align-items:center;justify-content:center;height:480px;
   color:var(--ink-faint);font-size:13px;text-align:center;padding:20px}
 
 /* clock in transport row */
@@ -264,6 +264,7 @@ td.best::after{content:"▲";font-size:9px;margin-left:6px;color:var(--alinea);o
 .legend-sep{width:1px;height:14px;background:var(--line);margin:0 4px}
 .legend-chip{display:inline-flex;align-items:center;gap:5px}
 .legend-chip i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.legend-hint{margin-left:auto;color:var(--ink-faint);font-size:11px}
 .chip-meter{background:#54d6a0}.chip-queue{background:#f2607a}
 
 /* ---------- demand data panel ---------- */
@@ -356,6 +357,7 @@ pre.csv{background:#0b0f16;border:1px solid var(--line);border-radius:9px;paddin
   .explainer-inner{grid-template-columns:1fr;gap:18px}
   .live-readout{grid-template-columns:repeat(2,1fr)}
   .chart-grid{grid-template-columns:1fr}
+  .legend-hint{display:none}
 }
 
 /* ============================================================

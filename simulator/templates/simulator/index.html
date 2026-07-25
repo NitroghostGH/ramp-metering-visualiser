@@ -106,7 +106,7 @@
           <span class="legend-sep"></span>
           <span class="legend-chip"><i class="chip-meter"></i> ramp meter</span>
           <span class="legend-chip"><i class="chip-queue"></i> ramp queue</span>
-          <span class="legend-hint">hover the road to inspect · Space = play/pause · ←/→ = step 1 min</span>
+          <span class="legend-hint">hover to inspect · click a ramp for detail · Space = play/pause · ←/→ = step 1 min</span>
         </div>
       </div>
       <div id="view-map" class="map-wrap hidden"><div id="map"></div></div>
@@ -128,6 +128,20 @@
         <div class="ro"><span class="ro-k">Vehicles queued on ramps</span><span class="ro-v" id="ro-queue">–</span></div>
         <div class="ro"><span class="ro-k">Bottleneck discharge</span><span class="ro-v" id="ro-flow">–</span></div>
         <div class="ro"><span class="ro-k">Speed limit (VSL)</span><span class="ro-v" id="ro-vsl">–</span></div>
+      </div>
+
+      <!-- per-ramp detail: opens when a ramp is clicked on the schematic or map -->
+      <div id="ramp-panel" class="ramp-panel hidden">
+        <div class="rp-head">
+          <span class="rp-title" id="rp-title">–</span>
+          <span class="rp-sub" id="rp-sub"></span>
+          <button id="rp-close" class="rp-close" title="Close (Esc)">×</button>
+        </div>
+        <div class="rp-grid">
+          <figure><figcaption>Queue on ramp (veh) — dashes = storage limit</figcaption><canvas class="mini" id="r-queue"></canvas></figure>
+          <figure><figcaption>Metering rate (veh/h) — dashes = unmetered</figcaption><canvas class="mini" id="r-rate"></canvas></figure>
+          <figure><figcaption>Occupancy at merge (%) — dashes = target ô</figcaption><canvas class="mini" id="r-occ"></canvas></figure>
+        </div>
       </div>
     </section>
 

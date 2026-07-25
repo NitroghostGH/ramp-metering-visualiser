@@ -153,8 +153,10 @@ def simulate(request):
         "ramps": [{"seg": r["seg"], "km": r["km"], "name": r["name"],
                    "kind": r["kind"], "demand": r["demand"], "geo": r["geo"],
                    "split": r["split"]} for r in corridor["ramps"]],
-        "on_ramps": [{"seg": r["seg"], "name": r["name"], "geo": r["geo"]}
+        "on_ramps": [{"seg": r["seg"], "name": r["name"], "geo": r["geo"],
+                      "km": r["km"], "storage": r["storage"]}
                      for r in corridor["on_ramps"]],
+        "ramp_capacity": p.ramp_capacity,
         "geo": corridor["geo"],
         "target_occupancy": round(p.target_occupancy, 2),
         "rho_crit": p.rho_crit, "rho_max": p.rho_max, "v_free": p.v_free, "a_fd": p.a_fd,

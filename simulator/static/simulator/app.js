@@ -26,6 +26,8 @@ let demandProfile = null;      // uploaded {time_s, mainline, ramps} or null
 let hover = null;              // {frac:0..1, seg|null} — cursor shared by all charts
 let scrubbing = false;
 let roadHover = null;          // {x,y} cursor on the schematic canvas
+let selRamp = null;            // index into meta.on_ramps — opens the detail panel
+let rampHits = [];             // clickable ramp regions, rebuilt by drawRoad()
 
 // chart plot-area insets (shared between drawing and pointer hit-testing)
 const MINI_PAD = { l: 34, r: 8, t: 10, b: 22 };
@@ -98,6 +100,8 @@ async function run(){
     DATA = await res.json();
     precompute();
     frame = 0; resetParticles();
+    if(selRamp!=null && selRamp>=DATA.meta.on_ramps.length){ selRamp=null; }
+    updateRampPanel();
     setCaption();
     buildMap();
     refreshAll();
@@ -199,6 +203,35 @@ function drawCharts(){
   drawMini("c-occ",   k=>DATA.results[k].occ_bneck,
            {ref:{value:DATA.meta.target_occupancy, label:"ô"}});
   drawHeat();
+  if(selRamp!=null) drawRampCharts();
+}
+
+/* per-ramp detail: the three signals ALINEA/HERO act on at one ramp.
+   The rate chart is where HERO's coordination shows — a recruited upstream
+   ramp's rate drops while its own merge occupancy is still below target. */
+function drawRampCharts(){
+  const o=DATA.meta.on_ramps[selRamp]; if(!o) return;
+  drawMini("r-queue", k=>DATA.results[k].ramp_queue[selRamp],
+           {ref:{value:o.storage, label:"storage", color:"#f2607a"}, refPad:1.15});
+  drawMini("r-rate",  k=>DATA.results[k].ramp_meter[selRamp],
+           {ref:{value:DATA.meta.ramp_capacity, label:"cap", color:"#9fb0c5"}, refPad:1.12});
+  drawMini("r-occ",   k=>DATA.results[k].ramp_occ[selRamp],
+           {ref:{value:DATA.meta.target_occupancy, label:"ô"}});
+}
+
+function selectRamp(j){
+  selRamp = (selRamp===j) ? null : j;
+  updateRampPanel();
+}
+function updateRampPanel(){
+  document.getElementById("ramp-panel").classList.toggle("hidden", selRamp==null);
+  if(selRamp!=null && DATA){
+    const o=DATA.meta.on_ramps[selRamp];
+    document.getElementById("rp-title").textContent=o.name;
+    document.getElementById("rp-sub").textContent=
+      `merges at km ${o.km.toFixed(1)} · storage ${o.storage} veh`;
+  }
+  if(DATA) renderFrame();
 }
 function drawMini(id, pick, opts){
   const cv=document.getElementById(id); const {ctx,w,h}=setupCanvas(cv);
@@ -210,20 +243,20 @@ function drawMini(id, pick, opts){
   let ymax=-Infinity,ymin=Infinity;
   for(const s of series) for(const v of s.data){ if(v>ymax)ymax=v; if(v<ymin)ymin=v; }
   ymin=Math.min(ymin,0); ymax=(ymax*1.08)||1;
-  if(opts.ref) ymax=Math.max(ymax, opts.ref.value*1.25);
+  if(opts.ref) ymax=Math.max(ymax, opts.ref.value*(opts.refPad||1.25));
   const n=series[0].data.length;
   const X=i=>pad.l+iw*i/(n-1), Y=v=>pad.t+ih*(1-(v-ymin)/(ymax-ymin));
   ctx.strokeStyle="#1c2532"; ctx.fillStyle="#5c6a7e"; ctx.font=MONO; ctx.lineWidth=1;
   for(let g=0;g<=2;g++){ const val=ymin+(ymax-ymin)*g/2,y=Y(val);
     ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();
     ctx.fillText(val.toFixed(val<10?1:0),3,y+3); }
-  // dashed reference line (e.g. the ALINEA target occupancy ô)
+  // dashed reference line (e.g. the ALINEA target occupancy ô, ramp storage)
   if(opts.ref){
-    const ry=Y(opts.ref.value);
-    ctx.strokeStyle="rgba(243,193,74,.6)"; ctx.setLineDash([5,4]);
+    const ry=Y(opts.ref.value), col=opts.ref.color||"#f3c14a";
+    ctx.strokeStyle=col; ctx.globalAlpha=0.6; ctx.setLineDash([5,4]);
     ctx.beginPath();ctx.moveTo(pad.l,ry);ctx.lineTo(w-pad.r,ry);ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle="#f3c14a"; ctx.textAlign="right";
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+    ctx.fillStyle=col; ctx.textAlign="right";
     ctx.fillText(opts.ref.label+" "+opts.ref.value, w-pad.r-2, ry-4);
     ctx.textAlign="left";
   }
@@ -285,13 +318,14 @@ function drawHeat(){
     ctx.fillStyle=speedColor(grid[i][s]);
     ctx.fillRect(pad.l+i*colW, pad.t+s*rowH, colW+0.6, rowH+0.6);
   }
-  // ramp markers on the left edge
+  // ramp markers on the left edge (selected ramp echoes the detail panel)
   ctx.font=MONO;
-  for(const o of m.on_ramps){
+  m.on_ramps.forEach((o,j)=>{
     const y=pad.t+o.seg*rowH+rowH/2;
     ctx.fillStyle="rgba(12,15,22,.7)"; ctx.fillRect(pad.l,y-6,86,12);
-    ctx.fillStyle="#e8edf5"; ctx.fillText("▸ "+o.name.slice(0,13), pad.l+3, y+3);
-  }
+    ctx.fillStyle = j===selRamp ? "#54d6a0" : "#e8edf5";
+    ctx.fillText("▸ "+o.name.slice(0,13), pad.l+3, y+3);
+  });
   // bottleneck row marker (matches the schematic's cyan detector line)
   const by=pad.t+(m.bottleneck_seg+1)*rowH;
   ctx.strokeStyle="rgba(92,200,255,.55)"; ctx.setLineDash([4,4]); ctx.lineWidth=1;
@@ -482,15 +516,24 @@ function drawRoad(){
     ctx.textAlign="left"; ctx.fillText("VSL zone", x0+2, zy-7);
   }
 
-  // on-ramps + meters + queues
+  // on-ramps + meters + queues (each arm is clickable → per-ramp detail panel)
   const t=fi*m.step;
+  rampHits=[];
   m.on_ramps.forEach((o,j)=>{
     const mx=segX(o.seg)+ (segX(o.seg+1)-segX(o.seg))*0.5;
     const lanes=m.lanes[o.seg], lh=lanes*lanePx;
     const mergeY=baseline-2;
     const rampBottom=baseline+58, rampStartX=mx-70;
-    ctx.strokeStyle="#2b3646"; ctx.lineWidth=6; ctx.lineCap="round";
+    rampHits.push({j, x0:rampStartX-12, y0:mergeY, x1:mx+10, y1:rampBottom+30});
+    const hovered = roadHover && roadHover.x>=rampStartX-12 && roadHover.x<=mx+10
+                    && roadHover.y>=mergeY && roadHover.y<=rampBottom+30;
+    ctx.strokeStyle = j===selRamp ? "#3f5d55" : hovered ? "#35424f" : "#2b3646";
+    ctx.lineWidth=6; ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(rampStartX,rampBottom); ctx.lineTo(mx,mergeY); ctx.stroke();
+    if(j===selRamp){ // accent edge marking the ramp open in the detail panel
+      ctx.strokeStyle="rgba(84,214,160,.85)"; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.moveTo(rampStartX,rampBottom); ctx.lineTo(mx,mergeY); ctx.stroke();
+    }
     ctx.lineCap="butt"; ctx.lineWidth=1;
 
     // queue dots
@@ -507,7 +550,7 @@ function drawRoad(){
     const restricting = control!=="none" && meter < dem-30;
     drawMeter(ctx, rampStartX-4, rampBottom-6, !restricting);
     // name
-    ctx.fillStyle="#7d8ba0"; ctx.font=MONO; ctx.textAlign="center";
+    ctx.fillStyle = j===selRamp ? "#54d6a0" : "#7d8ba0"; ctx.font=MONO; ctx.textAlign="center";
     const short=o.name.replace(/^Off:\s*/,'');
     ctx.fillText(short.length>16?short.slice(0,15)+"…":short, mx, rampBottom+14);
     // live queue count under the meter
@@ -616,7 +659,7 @@ function buildMap(){
   m.on_ramps.forEach((o,j)=>{
     const mk=L.circleMarker(o.geo,{radius:7,color:"#0c0f16",weight:2,fillOpacity:1,fillColor:"#54d6a0"})
       .bindTooltip(o.name,{direction:"top"}).addTo(map);
-    mk._rampIdx=j; mapLayers.push(mk);
+    mk._rampIdx=j; mk.on("click",()=>selectRamp(j)); mapLayers.push(mk);
   });
 }
 function updateMap(){
@@ -851,7 +894,7 @@ function setFrameFrac(frac){
   frame=frac*(n-1); seedParticles(); renderFrame();
 }
 function initChartInteractions(){
-  for(const id of ["c-speed","c-queue","c-occ","c-heat"]){
+  for(const id of ["c-speed","c-queue","c-occ","c-heat","r-queue","r-rate","r-occ"]){
     const cv=document.getElementById(id);
     const pad = id==="c-heat" ? HEAT_PAD : MINI_PAD;
     const pos=ev=>{
@@ -884,16 +927,24 @@ function initChartInteractions(){
       hover=null; if(DATA && !playing) renderFrame();
     });
   }
-  // schematic road: hover to inspect the segment under the cursor
+  // schematic road: hover to inspect the segment, click a ramp for detail
   const road=document.getElementById("road");
+  const rampAt=(x,y)=>rampHits.find(h=>x>=h.x0&&x<=h.x1&&y>=h.y0&&y<=h.y1);
   road.addEventListener("pointermove",ev=>{
     if(!DATA) return;
     const r=road.getBoundingClientRect();
     roadHover={x:ev.clientX-r.left, y:ev.clientY-r.top};
+    road.style.cursor = rampAt(roadHover.x,roadHover.y) ? "pointer" : "crosshair";
     if(!playing) renderFrame();
   });
   road.addEventListener("pointerleave",()=>{
-    roadHover=null; if(DATA && !playing) renderFrame();
+    roadHover=null; road.style.cursor=""; if(DATA && !playing) renderFrame();
+  });
+  road.addEventListener("click",ev=>{
+    if(!DATA) return;
+    const r=road.getBoundingClientRect();
+    const hit=rampAt(ev.clientX-r.left, ev.clientY-r.top);
+    if(hit) selectRamp(hit.j);
   });
 }
 
@@ -901,7 +952,8 @@ function initKeyboard(){
   document.addEventListener("keydown",e=>{
     if(e.target.matches("input,textarea,select,button")) return;
     if(!document.getElementById("info-modal").classList.contains("hidden")) return;
-    if(e.key===" "){ e.preventDefault(); togglePlay(); }
+    if(e.key==="Escape" && selRamp!=null){ selRamp=null; updateRampPanel(); }
+    else if(e.key===" "){ e.preventDefault(); togglePlay(); }
     else if((e.key==="ArrowLeft"||e.key==="ArrowRight") && DATA){
       e.preventDefault(); togglePlay(false);
       const n=DATA.results[scnKey()].t.length;
@@ -915,6 +967,7 @@ function initKeyboard(){
 /* ------------------------------------------------------------ wiring */
 function initControls(){
   document.getElementById("btn-play").addEventListener("click",()=>togglePlay());
+  document.getElementById("rp-close").addEventListener("click",()=>{ selRamp=null; updateRampPanel(); });
   document.getElementById("btn-info").addEventListener("click",()=>openInfo());
   document.getElementById("open-data-help").addEventListener("click",e=>{ e.preventDefault(); openInfo("sec-data"); });
   initModal();

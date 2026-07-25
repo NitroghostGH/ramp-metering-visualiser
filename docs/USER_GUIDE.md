@@ -59,12 +59,27 @@ connection for the map tiles; the Schematic view works offline.
 
 ## Charts and readouts
 
-- **Mean corridor speed** and **Total vehicles queued on ramps** — plotted for
-  all three strategies at once, with a moving time cursor.
+- **Mean corridor speed**, **Total vehicles queued on ramps** and **Bottleneck
+  occupancy** (against the dashed target ô) — plotted for all three strategies
+  at once, with a moving time cursor.
 - **Space–time speed map** — rows are points down the corridor (ramps labelled),
   left→right is time. Red diagonals are congestion waves travelling upstream.
 - **Live readouts** — mean speed, bottleneck occupancy, vehicles queued, discharge
   flow, and the current VSL speed limit at the scrubbed time.
+- Click or drag **any chart** to move the shared time cursor; hover for exact
+  values. On the schematic, hover the road to inspect a segment. **Space**
+  toggles play/pause and **←/→** step one minute.
+
+## Per-ramp detail
+
+Click any on-ramp arm on the schematic (or a ramp marker on the map) to open a
+detail panel with that ramp's **queue vs its storage limit**, **metering rate
+vs unmetered capacity**, and **occupancy at the merge vs target ô** for all
+three strategies. This is where the control logic is easiest to see: ALINEA
+throttles the rate as merge occupancy passes ô, the queue-override releases the
+meter when storage fills (the sawtooth), and under HERO an upstream ramp's rate
+dips while its own occupancy is still healthy — it has been recruited to store
+vehicles for the bottleneck ramp. Press **Esc** or ✕ to close.
 
 ## The scoreboard
 

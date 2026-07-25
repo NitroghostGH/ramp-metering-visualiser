@@ -23,6 +23,12 @@ let vslOn = false;
 let view = "schematic";
 let frame = 0, playing = false, rate = 1, lastTS = 0;
 let demandProfile = null;      // uploaded {time_s, mainline, ramps} or null
+let hover = null;              // {frac:0..1, seg|null} — cursor shared by all charts
+let scrubbing = false;
+
+// chart plot-area insets (shared between drawing and pointer hit-testing)
+const MINI_PAD = { l: 34, r: 8, t: 10, b: 22 };
+const HEAT_PAD = { l: 4, r: 4, t: 1, b: 16 };
 
 const scnKey = () => control + (vslOn ? "_vsl" : "");
 
@@ -194,7 +200,7 @@ function drawMini(id, pick, opts){
   if(!DATA) return;
   const suffix=vslOn?"_vsl":"";
   const series=["none","alinea","hero"].map(c=>({color:COLORS[c],data:pick(c+suffix)}));
-  const pad={l:34,r:8,t:10,b:22}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
+  const pad=MINI_PAD, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
   let ymax=-Infinity,ymin=Infinity;
   for(const s of series) for(const v of s.data){ if(v>ymax)ymax=v; if(v<ymin)ymin=v; }
   ymin=Math.min(ymin,0); ymax=(ymax*1.08)||1;
@@ -217,6 +223,34 @@ function drawMini(id, pick, opts){
   ctx.textAlign="center"; ctx.fillText(""+Math.round(tot/2), pad.l+iw/2, h-5);
   ctx.textAlign="right";  ctx.fillText(tot+" min", w-pad.r, h-5);
   ctx.textAlign="left";
+  // hover: crosshair + per-scenario values at the hovered time
+  if(hover){
+    const hi=Math.round(hover.frac*(n-1)), hx=X(hi);
+    ctx.strokeStyle="rgba(92,200,255,.5)"; ctx.setLineDash([3,3]); ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(hx,pad.t);ctx.lineTo(hx,pad.t+ih);ctx.stroke();
+    ctx.setLineDash([]);
+    for(const s of series){ ctx.fillStyle=s.color;
+      ctx.beginPath();ctx.arc(hx,Y(s.data[hi]),2.6,0,7);ctx.fill(); }
+    const tmin=Math.round(hi*DATA.meta.step/60);
+    const items=[["#9fb0c5",tmin+" min"]]
+      .concat(series.map(s=>[s.color, s.data[hi]<10?""+(+s.data[hi].toFixed(1)):""+Math.round(s.data[hi])]));
+    drawReadout(ctx, items, hx, pad.t+11, pad.l+2, w-pad.r);
+  }
+}
+
+// small pill of coloured values next to the hover cursor, kept inside [xmin,xmax]
+function drawReadout(ctx, items, hx, y, xmin, xmax){
+  ctx.font=MONO; ctx.textAlign="left";
+  const gap=9;
+  let tw=-gap; for(const it of items) tw+=ctx.measureText(it[1]).width+gap;
+  let x=hx+9;
+  if(x+tw>xmax) x=hx-9-tw;
+  if(x<xmin) x=xmin;
+  ctx.fillStyle="rgba(9,13,20,.88)";
+  roundRect(ctx,x-5,y-10,tw+10,15,4); ctx.fill();
+  ctx.strokeStyle="rgba(92,200,255,.25)"; ctx.lineWidth=1; ctx.stroke();
+  for(const it of items){ ctx.fillStyle=it[0]; ctx.fillText(it[1],x,y+2);
+    x+=ctx.measureText(it[1]).width+gap; }
 }
 
 function drawHeat(){
@@ -227,28 +261,77 @@ function drawHeat(){
   document.getElementById("heat-scn").textContent =
     ({none:"No control",alinea:"Local ALINEA",hero:"HERO"})[control] + (vslOn?" + VSL":"");
   const grid=R.seg_v, n=grid.length, N=grid[0].length;
-  const padL=4, padR=4, iw=w-padL-padR, ih=h-2;
+  const m=DATA.meta;
+  const pad=HEAT_PAD, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
   const colW=iw/n, rowH=ih/N;
   for(let i=0;i<n;i++) for(let s=0;s<N;s++){
     ctx.fillStyle=speedColor(grid[i][s]);
-    ctx.fillRect(padL+i*colW, 1+s*rowH, colW+0.6, rowH+0.6);
+    ctx.fillRect(pad.l+i*colW, pad.t+s*rowH, colW+0.6, rowH+0.6);
   }
   // ramp markers on the left edge
-  ctx.fillStyle="rgba(255,255,255,.85)"; ctx.font=MONO;
-  for(const o of DATA.meta.on_ramps){
-    const y=1+o.seg*rowH+rowH/2;
-    ctx.fillStyle="rgba(12,15,22,.7)"; ctx.fillRect(padL,y-6,86,12);
-    ctx.fillStyle="#e8edf5"; ctx.fillText("▸ "+o.name.slice(0,13), padL+3, y+3);
+  ctx.font=MONO;
+  for(const o of m.on_ramps){
+    const y=pad.t+o.seg*rowH+rowH/2;
+    ctx.fillStyle="rgba(12,15,22,.7)"; ctx.fillRect(pad.l,y-6,86,12);
+    ctx.fillStyle="#e8edf5"; ctx.fillText("▸ "+o.name.slice(0,13), pad.l+3, y+3);
   }
+  // bottleneck row marker (matches the schematic's cyan detector line)
+  const by=pad.t+(m.bottleneck_seg+1)*rowH;
+  ctx.strokeStyle="rgba(92,200,255,.55)"; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,by);ctx.lineTo(pad.l+iw,by);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.textAlign="right";
+  ctx.fillStyle="rgba(12,15,22,.7)"; ctx.fillRect(pad.l+iw-74,by-13,74,12);
+  ctx.fillStyle="rgba(92,200,255,.9)"; ctx.fillText("bottleneck", pad.l+iw-4, by-4);
+  // time axis (minutes), matching the mini charts
+  const tot=Math.round(m.horizon/60);
+  ctx.fillStyle="#5c6a7e";
+  ctx.textAlign="left";   ctx.fillText("0", pad.l+2, h-4);
+  ctx.textAlign="center"; ctx.fillText(""+Math.round(tot/2), pad.l+iw/2, h-4);
+  ctx.textAlign="right";  ctx.fillText(tot+" min", pad.l+iw, h-4);
+  ctx.textAlign="left";
   // time cursor
-  const cx=padL+iw*Math.min(frame,n-1)/(n-1);
+  const cx=pad.l+iw*Math.min(frame,n-1)/(n-1);
   ctx.strokeStyle="rgba(255,255,255,.5)";ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(cx,1);ctx.lineTo(cx,h-1);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,pad.t);ctx.lineTo(cx,pad.t+ih);ctx.stroke();
+  // hover: crosshair + cell readout (time · position · speed)
+  if(hover){
+    const hi=Math.round(hover.frac*(n-1)), hx=pad.l+iw*hi/(n-1);
+    ctx.strokeStyle="rgba(92,200,255,.5)"; ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(hx,pad.t);ctx.lineTo(hx,pad.t+ih);ctx.stroke();
+    if(hover.seg!=null){
+      const s=Math.min(N-1,hover.seg), hy=pad.t+(s+0.5)*rowH;
+      ctx.beginPath();ctx.moveTo(pad.l,hy);ctx.lineTo(pad.l+iw,hy);ctx.stroke();
+      ctx.setLineDash([]);
+      const v=grid[hi][s], km=(s+0.5)*m.seg_length;
+      const items=[["#9fb0c5",Math.round(hi*m.step/60)+" min"],
+                   ["#e8edf5","km "+km.toFixed(1)],
+                   [speedColor(v),Math.round(v)+" km/h"]];
+      const yr = hy<pad.t+ih/2 ? Math.min(hy+18,pad.t+ih-6) : hy-14;
+      drawReadout(ctx, items, hx, yr, pad.l+2, pad.l+iw);
+    }
+    ctx.setLineDash([]);
+  }
 }
 
 /* ------------------------------------------------------------ schematic */
 let particles=[], spawnAcc=0, rampAcc=[];
 function resetParticles(){ particles=[]; spawnAcc=0; rampAcc=(DATA?DATA.meta.on_ramps.map(()=>0):[]); }
+
+// After a scrub the spawn pipeline is empty; seed vehicles from the model's
+// density so the paused schematic still shows the traffic state. The 0.55
+// factor matches the visual density the flow-driven spawner settles at.
+function seedParticles(){
+  resetParticles();
+  if(!DATA) return;
+  const m=DATA.meta, R=DATA.results[scnKey()], fi=frameIdx();
+  for(let i=0;i<m.n_segments;i++){
+    const count=Math.round(R.seg_rho[fi][i]*m.seg_length*m.lanes[i]*0.55);
+    for(let k=0;k<count;k++)
+      particles.push({x:(i+Math.random())*m.seg_length, lf:Math.random(), spd:R.seg_v[fi][i]});
+  }
+  if(particles.length>1600) particles.splice(0,particles.length-1600);
+}
 
 function demandScale(t){ // mirror engine.demand_scale (trapezoid)
   const H=DATA.meta.horizon, b=0.55;
@@ -365,6 +448,23 @@ function drawRoad(){
   ctx.setLineDash([]); ctx.fillStyle="rgba(92,200,255,.85)"; ctx.font=MONO;
   ctx.fillText("bottleneck", bx+3, baseline-maxLanes*lanePx+2);
 
+  // VSL zone: dashed amber bracket + live sign over the segments the engine
+  // is currently limiting (vsl_upto = first segment past the zone)
+  if(vslOn && R.vsl && R.vsl[fi] < m.v_free-2){
+    const upto=R.vsl_upto ? Math.max(1,Math.min(R.vsl_upto[fi],m.n_segments)) : m.n_segments;
+    const x0=segX(0), x1=segX(upto), zy=baseline-maxLanes*lanePx-24;
+    ctx.strokeStyle="rgba(243,193,74,.75)"; ctx.lineWidth=1.2; ctx.setLineDash([6,5]);
+    ctx.beginPath(); ctx.moveTo(x0,zy); ctx.lineTo(x1,zy); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x1,zy); ctx.lineTo(x1,zy+7); ctx.stroke();
+    const cxm=(x0+x1)/2, lim=Math.round(R.vsl[fi]);
+    ctx.fillStyle="#0d1119"; roundRect(ctx,cxm-15,zy-9,30,18,4); ctx.fill();
+    ctx.strokeStyle="#f3c14a"; ctx.lineWidth=1.4; roundRect(ctx,cxm-15,zy-9,30,18,4); ctx.stroke();
+    ctx.fillStyle="#f3c14a"; ctx.font=MONO; ctx.textAlign="center";
+    ctx.fillText(""+lim, cxm, zy+4);
+    ctx.textAlign="left"; ctx.fillText("VSL zone", x0+2, zy-7);
+  }
+
   // on-ramps + meters + queues
   const t=fi*m.step;
   m.on_ramps.forEach((o,j)=>{
@@ -393,6 +493,11 @@ function drawRoad(){
     ctx.fillStyle="#7d8ba0"; ctx.font=MONO; ctx.textAlign="center";
     const short=o.name.replace(/^Off:\s*/,'');
     ctx.fillText(short.length>16?short.slice(0,15)+"…":short, mx, rampBottom+14);
+    // live queue count under the meter
+    if(q>=1){
+      ctx.fillStyle="#f2607a";
+      ctx.fillText(Math.round(q)+"", rampStartX+1.5, rampBottom+26);
+    }
     ctx.textAlign="left";
   });
 
@@ -675,6 +780,47 @@ function downloadTemplate(){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+/* ------------------------------------------------------------ chart scrub/hover */
+function setFrameFrac(frac){
+  const n=DATA.results[scnKey()].t.length;
+  frame=frac*(n-1); seedParticles(); renderFrame();
+}
+function initChartInteractions(){
+  for(const id of ["c-speed","c-queue","c-heat"]){
+    const cv=document.getElementById(id);
+    const pad = id==="c-heat" ? HEAT_PAD : MINI_PAD;
+    const pos=ev=>{
+      const r=cv.getBoundingClientRect();
+      const frac=Math.max(0,Math.min(1,(ev.clientX-r.left-pad.l)/(r.width-pad.l-pad.r)));
+      let seg=null;
+      if(id==="c-heat"){
+        const ih=r.height-pad.t-pad.b, N=DATA.meta.n_segments;
+        seg=Math.max(0,Math.min(N-1,Math.floor((ev.clientY-r.top-pad.t)/ih*N)));
+      }
+      return {frac,seg};
+    };
+    cv.addEventListener("pointerdown",ev=>{
+      if(!DATA) return;
+      cv.setPointerCapture(ev.pointerId);
+      scrubbing=true; togglePlay(false);
+      const p=pos(ev); hover=p; setFrameFrac(p.frac);
+    });
+    cv.addEventListener("pointermove",ev=>{
+      if(!DATA) return;
+      const p=pos(ev); hover=p;
+      if(scrubbing) setFrameFrac(p.frac);
+      else if(!playing) renderFrame();
+    });
+    const end=()=>{ scrubbing=false; };
+    cv.addEventListener("pointerup",end);
+    cv.addEventListener("pointercancel",end);
+    cv.addEventListener("pointerleave",()=>{
+      if(scrubbing) return;
+      hover=null; if(DATA && !playing) renderFrame();
+    });
+  }
+}
+
 /* ------------------------------------------------------------ wiring */
 function initControls(){
   document.getElementById("btn-play").addEventListener("click",()=>togglePlay());
@@ -684,12 +830,12 @@ function initControls(){
   initDataUpload();
   document.getElementById("timeline").addEventListener("input",e=>{
     if(!DATA)return; const n=DATA.results[scnKey()].t.length;
-    frame=(e.target.value/100)*(n-1); resetParticles(); renderFrame();
+    frame=(e.target.value/100)*(n-1); seedParticles(); renderFrame();
   });
   document.querySelectorAll("#scenario-tabs button").forEach(b=>
     b.addEventListener("click",()=>{ control=b.dataset.scn;
       document.querySelectorAll("#scenario-tabs button").forEach(x=>x.classList.remove("active"));
-      b.classList.add("active"); resetParticles(); refreshAll(); }));
+      b.classList.add("active"); seedParticles(); refreshAll(); }));
   document.querySelectorAll("#view-toggle button").forEach(b=>
     b.addEventListener("click",()=>{ view=b.dataset.view;
       document.querySelectorAll("#view-toggle button").forEach(x=>x.classList.remove("active"));
@@ -713,5 +859,6 @@ function initControls(){
 initCorridors();
 initSliders();
 initControls();
+initChartInteractions();
 requestAnimationFrame(loop);
 run();

@@ -299,6 +299,7 @@ class Simulation:
         rec["ramp_meter"] = [[] for _ in range(self.nr)]
         rec["ramp_occ"] = [[] for _ in range(self.nr)]
         rec["vsl"] = []
+        rec["vsl_upto"] = []   # first segment NOT covered by the VSL zone
         rec["main_queue"] = []
         total_tt = 0.0
 
@@ -334,6 +335,7 @@ class Simulation:
             rec["mean_speed_t"].append(round(mean_num / dens, 2))
             rec["veh_total"].append(round(veh, 1))
             rec["vsl"].append(round(self.vsl_limit, 1))
+            rec["vsl_upto"].append(int(worst) if self.vsl else 0)
             rec["main_queue"].append(round(self.w_main, 1))
             rec["seg_rho"].append([round(x, 1) for x in self.rho])
             rec["seg_v"].append([round(x, 1) for x in self.v])

@@ -29,6 +29,41 @@ let roadHover = null;          // {x,y} cursor on the schematic canvas
 let selRamp = null;            // index into meta.on_ramps — opens the detail panel
 let rampHits = [];             // clickable ramp regions, rebuilt by drawRoad()
 let PIN = null;                // pinned baseline {results, meta, desc} for A/B ghosts
+let URLVALS = {};              // slider values parsed from a shared link
+const SLIDER_DEF = {};         // each slider's default after step-snapping
+let pendingView = null;        // "map" from a shared link, applied after first run
+
+// query-string keys for each slider (kept short so shared links stay readable)
+const URL_KEYS = { demand_level:"d", alinea_gain:"k", target_occ:"o",
+                   control_period:"cp", hero_master:"hm", vsl_gain:"vg" };
+
+/* shareable state: corridor + sliders + scenario round-trip via the URL */
+function applyURLState(){
+  const q=new URLSearchParams(location.search);
+  const c=q.get("c");
+  if(c && CORRS.some(x=>x.id===c)) corridorId=c;
+  for(const [id,key] of Object.entries(URL_KEYS)){
+    const v=parseFloat(q.get(key));
+    if(!isNaN(v)) URLVALS[id]=v;
+  }
+  const ctl=q.get("ctl");
+  if(ctl==="alinea"||ctl==="hero") control=ctl;
+  if(q.get("vsl")==="1") vslOn=true;
+  if(q.get("view")==="map") pendingView="map";
+}
+function syncURL(){
+  const q=new URLSearchParams();
+  if(corridorId!==DEF.corridor) q.set("c",corridorId);
+  for(const [id,key] of Object.entries(URL_KEYS)){
+    const v=parseFloat(document.getElementById(id).value);
+    if(v!==SLIDER_DEF[id]) q.set(key,v);
+  }
+  if(control!=="none") q.set("ctl",control);
+  if(vslOn) q.set("vsl","1");
+  if(view==="map") q.set("view","map");
+  const s=q.toString();
+  history.replaceState(null,"", s ? "?"+s : location.pathname);
+}
 
 // chart plot-area insets (shared between drawing and pointer hit-testing)
 const MINI_PAD = { l: 34, r: 8, t: 10, b: 22 };
@@ -66,6 +101,8 @@ function initSliders(){
     const el = document.getElementById(id);
     if(id==="demand_level") el.value = Math.round(DEF.demand_level*100);
     else if(DEF[id]!==undefined) el.value = DEF[id];
+    SLIDER_DEF[id] = parseFloat(el.value);          // after the browser step-snaps
+    if(URLVALS[id]!=null) el.value = URLVALS[id];   // shared-link override
     const out = document.getElementById("v-"+id);
     const show = ()=> out.textContent = (FMT[id]||(x=>x))(el.value);
     show();
@@ -108,6 +145,10 @@ async function run(){
     setCaption();
     buildMap();
     refreshAll();
+    if(pendingView==="map"){ // a shared link asked for the map view
+      const b=document.querySelector('#view-toggle button[data-view="map"]');
+      pendingView=null; if(b) b.click();
+    }
     if(!playing) togglePlay(true);
   }catch(e){ console.error(e); }
 }
@@ -145,6 +186,7 @@ function refreshAll(){
   drawCharts();
   drawDemandPreview();
   renderFrame();
+  syncURL();
 }
 
 /* ------------------------------------------------------------ scoreboard */
@@ -153,13 +195,27 @@ function fillScoreboard(){
   const cols = ["none","alinea","hero"];
   const g = id=>document.getElementById(id);
   const suffix = vslOn ? "_vsl" : "";
+  // vs-baseline delta under each cell while a run is pinned; goodDir says
+  // which direction is an improvement (+1 higher-is-better, -1 lower)
+  const dHTML=(d,dec,goodDir,suf)=>{
+    if(d==null) return "";
+    const eps = dec?0.05:0.5;
+    if(Math.abs(d)<eps) return `<span class="delta flat">±0${suf}</span>`;
+    const cls = d*goodDir>0 ? "good" : "bad";
+    return `<span class="delta ${cls}">${d>0?"+":"−"}${Math.abs(d).toFixed(dec)}${suf}</span>`;
+  };
   for(const c of cols){
-    const r = R[c+suffix];
-    g(`s-speed-${c}`).textContent = r.mean_speed.toFixed(1);
-    g(`s-cong-${c}`).textContent  = (r.congested_frac*100).toFixed(0)+"%";
-    g(`s-flow-${c}`).textContent  = Math.round(r.throughput);
-    g(`s-ttt-${c}`).textContent   = r.total_travel_time.toFixed(0);
-    g(`s-queue-${c}`).textContent = r.max_ramp_queue.toFixed(0);
+    const r = R[c+suffix], b = PIN ? PIN.results[c+suffix] : null;
+    g(`s-speed-${c}`).innerHTML = r.mean_speed.toFixed(1)
+      + dHTML(b && r.mean_speed-b.mean_speed, 1, +1, "");
+    g(`s-cong-${c}`).innerHTML  = (r.congested_frac*100).toFixed(0)+"%"
+      + dHTML(b && (r.congested_frac-b.congested_frac)*100, 0, -1, "pt");
+    g(`s-flow-${c}`).innerHTML  = Math.round(r.throughput)
+      + dHTML(b && r.throughput-b.throughput, 0, +1, "");
+    g(`s-ttt-${c}`).innerHTML   = r.total_travel_time.toFixed(0)
+      + dHTML(b && r.total_travel_time-b.total_travel_time, 0, -1, "");
+    g(`s-queue-${c}`).innerHTML = r.max_ramp_queue.toFixed(0)
+      + dHTML(b && r.max_ramp_queue-b.max_ramp_queue, 0, -1, "");
   }
   markBest(["s-speed-none","s-speed-alinea","s-speed-hero"], Math.max);
   markBest(["s-cong-none","s-cong-alinea","s-cong-hero"], Math.min, true);
@@ -232,9 +288,9 @@ function pinBaseline(){
        desc:`K_R ${c.alinea_gain} · ô ${c.target_occ} · ${Math.round(c.demand_level*100)}%`
             +(vslOn?" · VSL":"")};
   updatePinUI();
-  drawCharts();
+  refreshAll();
 }
-function clearPin(){ PIN=null; updatePinUI(); if(DATA) drawCharts(); }
+function clearPin(){ PIN=null; updatePinUI(); if(DATA) refreshAll(); }
 function updatePinUI(){
   const chip=document.getElementById("pin-chip");
   chip.classList.toggle("hidden",!PIN);
@@ -1043,6 +1099,18 @@ function initControls(){
   document.getElementById("rp-close").addEventListener("click",()=>{ selRamp=null; updateRampPanel(); });
   document.getElementById("btn-pin").addEventListener("click",pinBaseline);
   document.getElementById("pin-chip").addEventListener("click",clearPin);
+  const share=document.getElementById("btn-share");
+  share.addEventListener("click",async()=>{
+    syncURL();
+    try{ await navigator.clipboard.writeText(location.href); }
+    catch(e){ // clipboard blocked (e.g. http) — select-and-copy fallback
+      const ta=document.createElement("textarea");
+      ta.value=location.href; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); ta.remove();
+    }
+    share.textContent="✓ Link copied"; share.classList.add("done");
+    setTimeout(()=>{ share.textContent="⧉ Share setup"; share.classList.remove("done"); },1600);
+  });
   document.getElementById("btn-info").addEventListener("click",()=>openInfo());
   document.getElementById("open-data-help").addEventListener("click",e=>{ e.preventDefault(); openInfo("sec-data"); });
   initModal();
@@ -1066,7 +1134,7 @@ function initControls(){
         if(lineBounds) map.fitBounds(lineBounds,{padding:[30,30]});
         updateMap();
       },120); }
-      renderFrame();
+      renderFrame(); syncURL();
     }));
   document.querySelectorAll(".speed-select button").forEach(b=>
     b.addEventListener("click",()=>{ rate=parseFloat(b.dataset.rate);
@@ -1075,6 +1143,7 @@ function initControls(){
   window.addEventListener("resize",()=>{ if(DATA){ renderFrame(); drawDemandPreview(); } });
 }
 
+applyURLState();
 initCorridors();
 initSliders();
 initControls();

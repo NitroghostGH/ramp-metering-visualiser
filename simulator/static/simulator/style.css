@@ -215,7 +215,9 @@ figcaption{font-size:11.5px;color:var(--ink-dim);margin-bottom:6px}
 .c-alinea{color:var(--alinea)}
 .c-vsl{color:var(--vsl)}
 td.best{position:relative}
-td.best::after{content:"▲";font-size:9px;margin-left:6px;color:var(--alinea);opacity:.9}
+/* absolute so the marker stays beside the value when a baseline delta adds a second line */
+td.best::after{content:"▲";font-size:9px;color:var(--alinea);opacity:.9;
+  position:absolute;right:3px;top:14px}
 .verdict{margin:14px 2px 0;color:var(--ink-dim);font-size:13.5px}
 .verdict b{color:var(--ink)}
 
@@ -509,7 +511,18 @@ ul.refs li{margin:4px 0}
 }
 
 /* learning entry-point button (header) */
+.topbar-actions{display:flex;gap:10px;align-items:center}
 .learn-btn{background:linear-gradient(180deg,rgba(92,200,255,.14),rgba(92,200,255,.05));
   border:1px solid rgba(92,200,255,.5);color:var(--accent);padding:9px 16px;border-radius:9px;
   cursor:pointer;font-size:13px;font-weight:600;transition:.15s;letter-spacing:.01em}
 .learn-btn:hover{background:rgba(92,200,255,.18);box-shadow:0 0 0 3px rgba(92,200,255,.12)}
+.share-btn{background:var(--bg-2);border:1px solid var(--line);color:var(--ink-dim);
+  padding:9px 14px;border-radius:9px;cursor:pointer;font-size:13px;transition:.15s}
+.share-btn:hover{color:var(--ink);border-color:var(--ink-faint)}
+.share-btn.done{color:var(--alinea);border-color:rgba(84,214,160,.5)}
+
+/* scoreboard deltas vs the pinned baseline */
+.delta{display:block;font-size:10.5px;font-family:var(--mono);margin-top:1px}
+.delta.good{color:var(--alinea)}
+.delta.bad{color:var(--none)}
+.delta.flat{color:var(--ink-faint)}

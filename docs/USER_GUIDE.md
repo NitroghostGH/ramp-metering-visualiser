@@ -71,8 +71,13 @@ connection for the map tiles; the Schematic view works offline.
   toggles play/pause and **←/→** step one minute.
 - **Pin baseline** snapshots the current run: it stays on the time-series and
   per-ramp charts as faint lines while you change sliders, so you can see
-  exactly what a different gain, target or demand level buys you. Click the
-  blue chip to clear it (switching corridor clears it too).
+  exactly what a different gain, target or demand level buys you. While a
+  baseline is pinned, every scoreboard cell also shows a green/red delta
+  against it. Click the blue chip to clear it (switching corridor clears it
+  too).
+- **⧉ Share setup** (header) copies a link that reproduces your current
+  corridor, sliders, scenario and view — the settings live in the URL, so any
+  configuration can be bookmarked or sent to a colleague.
 - The **Demand** section shows a live preview of the traffic entering the model
   over the hour — mainline and total on-ramp demand, following the demand-level
   slider and any uploaded CSV profile.

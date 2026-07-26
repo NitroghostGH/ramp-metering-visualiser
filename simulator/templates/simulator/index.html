@@ -70,6 +70,10 @@
         <label>VSL feedback gain <output id="v-vsl_gain"></output></label>
         <input type="range" id="vsl_gain" min="0" max="40" step="2">
       </div>
+      <div class="ctrl">
+        <label title="Minimum time a posted limit must stand before the signs may change again">Sign hold time <output id="v-vsl_hold"></output> <span class="unit">s</span></label>
+        <input type="range" id="vsl_hold" min="30" max="600" step="30">
+      </div>
 
       <h2 class="panel-title">Demand data</h2>
       <div class="data-box">
@@ -250,7 +254,7 @@
 
         <div class="eqn">
           <span class="eqn-no">1</span>
-          <span class="eqn-body"><var>V</var>(<var>ρ</var>) = <var>v</var><sub>f</sub> · exp<span class="brk">[</span> −<span class="frac"><span class="num">1</span><span class="den"><var>a</var></span></span> <span class="paren">(</span><span class="frac"><span class="num"><var>ρ</var></span><span class="den"><var>ρ</var><sub>cr</sub></span></span><span class="paren">)</span><sup><var>a</var></sup> <span class="brk">]</span></span>
+          <span class="eqn-body"><var>V</var>(<var>ρ</var>) = <var>v</var><sub>f</sub> · exp<span class="brk big">[</span> −<span class="frac"><span class="num">1</span><span class="den"><var>a</var></span></span> <span class="paren big">(</span><span class="frac"><span class="num"><var>ρ</var></span><span class="den"><var>ρ</var><sub>cr</sub></span></span><span class="paren big">)</span><sup><var>a</var></sup> <span class="brk big">]</span></span>
           <span class="eqn-read">speed falls smoothly from free-flow as density rises</span>
         </div>
         <p>Flow is just speed × density × lanes, which gives the humped curve below.
@@ -434,8 +438,11 @@
         Control) meters the motorway itself — thinning the flow arriving at the merge and
         buying the ramp controllers headroom. In the model a second feedback loop lowers
         the limit when the bottleneck occupancy runs above target, and the limit caps the
-        speed in the fundamental diagram (Eq.&nbsp;1). Layer it on top of any strategy with
-        the <b>Enable VSL</b> switch.</p>
+        speed in the fundamental diagram (Eq.&nbsp;1). The signs behave like real gantries:
+        limits post in 10&nbsp;km/h steps, change at most 20&nbsp;km/h at a time, must stand
+        for the <b>sign hold time</b> before changing again, and taper up going back from
+        the bottleneck (drivers see …80&nbsp;→&nbsp;60&nbsp;→&nbsp;40, never a cliff).
+        Layer it on top of any strategy with the <b>Enable VSL</b> switch.</p>
       </section>
 
       <!-- 07 -->

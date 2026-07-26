@@ -9,7 +9,7 @@ const DEF   = JSON.parse(app.dataset.defaults);
 const CORRS = JSON.parse(app.dataset.corridors);
 const COLORS = { none:"#f2607a", alinea:"#54d6a0", hero:"#f3c14a" };
 
-const SLIDERS = ["demand_level","alinea_gain","target_occ","control_period","hero_master","vsl_gain"];
+const SLIDERS = ["demand_level","alinea_gain","target_occ","control_period","hero_master","vsl_gain","vsl_hold"];
 const FMT = {
   demand_level: v => (+v).toFixed(0)+"%",
   target_occ:   v => (+v).toFixed(1),
@@ -35,7 +35,8 @@ let pendingView = null;        // "map" from a shared link, applied after first 
 
 // query-string keys for each slider (kept short so shared links stay readable)
 const URL_KEYS = { demand_level:"d", alinea_gain:"k", target_occ:"o",
-                   control_period:"cp", hero_master:"hm", vsl_gain:"vg" };
+                   control_period:"cp", hero_master:"hm", vsl_gain:"vg",
+                   vsl_hold:"vh" };
 
 /* shareable state: corridor + sliders + scenario round-trip via the URL */
 function applyURLState(){
@@ -126,6 +127,7 @@ function collect(){
     control_period: parseFloat(document.getElementById("control_period").value),
     hero_master: parseFloat(document.getElementById("hero_master").value),
     vsl_gain: parseFloat(document.getElementById("vsl_gain").value),
+    vsl_hold: parseFloat(document.getElementById("vsl_hold").value),
   };
   if(demandProfile) c.demand_profile = demandProfile;
   return c;
@@ -628,21 +630,28 @@ function drawRoad(){
   ctx.setLineDash([]); ctx.fillStyle="rgba(92,200,255,.85)"; ctx.font=MONO;
   ctx.fillText("bottleneck", bx+3, baseline-maxLanes*lanePx+2);
 
-  // VSL zone: dashed amber bracket + live sign over the segments the engine
-  // is currently limiting (vsl_upto = first segment past the zone)
+  // VSL zone: dashed amber bracket over the tapered approach, with one sign
+  // per covered segment stepping down toward the bottleneck (…80-60-40)
   if(vslOn && R.vsl && R.vsl[fi] < m.v_free-2){
     const upto=R.vsl_upto ? Math.max(1,Math.min(R.vsl_upto[fi],m.n_segments)) : m.n_segments;
-    const x0=segX(0), x1=segX(upto), zy=baseline-maxLanes*lanePx-24;
+    const from=R.vsl_from ? Math.max(0,Math.min(R.vsl_from[fi],upto-1)) : 0;
+    const step=m.vsl_step||20;
+    const x0=segX(from), x1=segX(upto), zy=baseline-maxLanes*lanePx-24;
     ctx.strokeStyle="rgba(243,193,74,.75)"; ctx.lineWidth=1.2; ctx.setLineDash([6,5]);
     ctx.beginPath(); ctx.moveTo(x0,zy); ctx.lineTo(x1,zy); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(x1,zy); ctx.lineTo(x1,zy+7); ctx.stroke();
-    const cxm=(x0+x1)/2, lim=Math.round(R.vsl[fi]);
-    ctx.fillStyle="#0d1119"; roundRect(ctx,cxm-15,zy-9,30,18,4); ctx.fill();
-    ctx.strokeStyle="#f3c14a"; ctx.lineWidth=1.4; roundRect(ctx,cxm-15,zy-9,30,18,4); ctx.stroke();
-    ctx.fillStyle="#f3c14a"; ctx.font=MONO; ctx.textAlign="center";
-    ctx.fillText(""+lim, cxm, zy+4);
-    ctx.textAlign="left"; ctx.fillText("VSL zone", x0+2, zy-7);
+    ctx.font=MONO; ctx.textAlign="center";
+    for(let i=from;i<upto;i++){
+      const lim=Math.round(Math.min(m.vlimit[i], R.vsl[fi]+step*(upto-1-i)));
+      if(lim>=m.vlimit[i]) continue;   // taper has reached the posted limit
+      const sx=(segX(i)+segX(i+1))/2;
+      ctx.fillStyle="#0d1119"; roundRect(ctx,sx-13,zy-9,26,18,4); ctx.fill();
+      ctx.strokeStyle="#f3c14a"; ctx.lineWidth=1.4; roundRect(ctx,sx-13,zy-9,26,18,4); ctx.stroke();
+      ctx.fillStyle="#f3c14a"; ctx.fillText(""+lim, sx, zy+4);
+    }
+    ctx.textAlign="left"; ctx.fillStyle="#f3c14a";
+    ctx.fillText("VSL zone", x0+2, zy-14);
   }
 
   // on-ramps + meters + queues (each arm is clickable → per-ramp detail panel)

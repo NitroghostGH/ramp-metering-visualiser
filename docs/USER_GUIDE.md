@@ -36,6 +36,11 @@ science behind it, see [MODEL.md](MODEL.md); to add your own network or data, se
 | **Control period** | How often the metering rate is recomputed (seconds). |
 | **HERO recruit threshold** | How full a bottleneck ramp gets before it recruits upstream ramps. |
 | **VSL feedback gain** | How aggressively speed limits drop upstream of the bottleneck. |
+| **Sign hold time** | Minimum seconds a posted VSL must stand before the signs may change again. |
+
+VSL signs behave like real gantries: limits post in 10 km/h steps, move at most
+20 km/h per change, and taper up going back from the bottleneck — on the
+schematic you'll see the approach signs step …80 → 60 → 40.
 
 Any change re-runs the simulation automatically.
 

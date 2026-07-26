@@ -168,6 +168,7 @@ input[type=range]::-moz-range-thumb{
 .ro-v{font-family:var(--mono);font-size:16px;color:var(--ink)}
 
 /* ---------- per-ramp detail panel ---------- */
+.ramp-panel.hidden,.pin-chip.hidden{display:none}
 .ramp-panel{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .rp-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
 .rp-title{font-weight:600;color:var(--ink)}
@@ -416,10 +417,12 @@ pre.csv{background:#0b0f16;border:1px solid var(--line);border-radius:9px;paddin
 
 /* math typesetting */
 var{font-family:var(--math);font-style:italic;color:var(--ink);font-size:1.06em;letter-spacing:.01em}
-.frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:-0.55em;margin:0 .18em;line-height:1.15}
+.frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 .18em;line-height:1.15;position:relative;top:-0.08em}
 .frac .num{padding:0 .4em}
 .frac .den{padding:2px .4em 0;border-top:1.4px solid currentColor}
 .paren,.brk{font-family:var(--math);opacity:.65;margin:0 .05em}
+/* brackets that wrap a stacked fraction stretch to its full height */
+.paren.big,.brk.big{font-size:1.8em;font-weight:250;line-height:0;vertical-align:-0.12em;opacity:.5}
 
 .eqn{position:relative;background:#0c111b;border:1px solid var(--line);
   border-radius:12px;padding:22px 54px 18px;margin:8px 0 16px;overflow-x:auto}

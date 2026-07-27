@@ -37,10 +37,14 @@ science behind it, see [MODEL.md](MODEL.md); to add your own network or data, se
 | **HERO recruit threshold** | How full a bottleneck ramp gets before it recruits upstream ramps. |
 | **VSL feedback gain** | How aggressively speed limits drop upstream of the bottleneck. |
 | **Sign hold time** | Minimum seconds a posted VSL must stand before the signs may change again. |
+| **VSL zone length** | How far upstream the lowest limit is posted (the controlled zone). |
 
 VSL signs behave like real gantries: limits post in 10 km/h steps, move at most
-20 km/h per change, and taper up going back from the bottleneck — on the
-schematic you'll see the approach signs step …80 → 60 → 40.
+20 km/h per change, and the lowest limit covers the controlled zone with an
+approach taper stepping up beyond it — on the schematic you'll see the signs
+step …80 → 60 → 40 into the dashed zone bracket, and the speed chart overlays
+the posted limit as an amber stepped line. Zone length matters: too short and
+the flow cap barely bites. VSL alone does little — layer it on ALINEA or HERO.
 
 Any change re-runs the simulation automatically.
 

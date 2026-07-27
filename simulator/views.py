@@ -20,6 +20,7 @@ _LIMITS = {
     "cap_drop":       (0.0, 0.30),
     "vsl_gain":       (0.0, 60.0),
     "vsl_hold":       (30.0, 600.0),
+    "vsl_zone":       (0.5, 8.0),
     "hero_master":    (0.1, 0.9),
 }
 
@@ -47,6 +48,7 @@ def index(request):
             "cap_drop": p.cap_drop,
             "vsl_gain": p.vsl_gain,
             "vsl_hold": p.vsl_hold,
+            "vsl_zone": p.vsl_zone_km,
             "hero_master": p.hero_master,
             "v_free": p.v_free,
             "rho_max": p.rho_max,
@@ -122,6 +124,7 @@ def simulate(request):
     p.cap_drop = _clamp("cap_drop", body.get("cap_drop"), p.cap_drop)
     p.vsl_gain = _clamp("vsl_gain", body.get("vsl_gain"), p.vsl_gain)
     p.vsl_hold = _clamp("vsl_hold", body.get("vsl_hold"), p.vsl_hold)
+    p.vsl_zone_km = _clamp("vsl_zone", body.get("vsl_zone"), p.vsl_zone_km)
     p.hero_master = _clamp("hero_master", body.get("hero_master"), p.hero_master)
     if body.get("target_occ") is not None:
         p.target_occ = _clamp("target_occ", body.get("target_occ"), p.target_occupancy)
@@ -160,7 +163,7 @@ def simulate(request):
                       "km": r["km"], "storage": r["storage"]}
                      for r in corridor["on_ramps"]],
         "ramp_capacity": p.ramp_capacity,
-        "vsl_step": p.vsl_step, "vsl_hold": p.vsl_hold,
+        "vsl_step": p.vsl_step, "vsl_hold": p.vsl_hold, "vsl_zone_km": p.vsl_zone_km,
         "geo": corridor["geo"],
         "target_occupancy": round(p.target_occupancy, 2),
         "rho_crit": p.rho_crit, "rho_max": p.rho_max, "v_free": p.v_free, "a_fd": p.a_fd,

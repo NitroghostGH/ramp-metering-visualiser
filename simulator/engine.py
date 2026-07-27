@@ -56,6 +56,7 @@ class Physics:
     vsl_compliance: float = 1.0
     vsl_hold: float = 120.0       # s a posted limit must stand before it may change
     vsl_step: float = 20.0        # km/h per sign change and per upstream taper zone
+    vsl_zone_km: float = 3.0      # length of the controlled zone at the lowest limit
 
     # clock
     T: float = 10.0               # s
@@ -124,6 +125,7 @@ class Simulation:
         self.vsl_target = self.p.v_free      # continuous feedback state behind it
         self.vsl_worst = N - 1               # frozen zone edge while a limit holds
         self.vsl_last_change = -1e9
+        self.vsl_zone_change = -1e9
 
     # -- demand ---------------------------------------------------------------
     @staticmethod
@@ -296,14 +298,16 @@ class Simulation:
 
         if self.vsl_limit >= p.v_free:
             self.vsl_worst = worst   # signs are blank — track the zone freely
+        elif t - self.vsl_zone_change >= p.vsl_hold and worst != self.vsl_worst:
+            self.vsl_worst = worst   # zone edge held on its own clock, so a
+            self.vsl_zone_change = t  # drifting bottleneck can't freeze the limit
         if t - self.vsl_last_change >= p.vsl_hold:
             posted = round(self.vsl_target / 10.0) * 10.0
             posted = min(max(posted, self.vsl_limit - p.vsl_step),
                          self.vsl_limit + p.vsl_step)
             posted = min(max(posted, p.vsl_min), p.v_free)
-            if posted != self.vsl_limit or worst != self.vsl_worst:
+            if posted != self.vsl_limit:
                 self.vsl_limit = posted
-                self.vsl_worst = worst
                 self.vsl_last_change = t
         return self.vsl_worst
 
@@ -337,11 +341,14 @@ class Simulation:
                     worst = self.vsl_update(t)
 
             if self.vsl:
-                # upstream approach taper: the segment beside the bottleneck
-                # posts the controlled limit, and each segment further back
-                # steps up by vsl_step (…80-60-40 as drivers approach)
+                # controlled zone: the lowest limit is posted over vsl_zone_km
+                # upstream of the bottleneck (the MTFC application area), then
+                # an approach taper steps up by vsl_step per segment beyond it
+                # (…80-60-40 as drivers arrive — never a cliff)
+                n_ctrl = max(1, int(round(p.vsl_zone_km / self.c["seg_length"])))
                 seg_limits = [min(self.vlimit[i],
-                                  self.vsl_limit + p.vsl_step * (worst - 1 - i)
+                                  self.vsl_limit
+                                  + p.vsl_step * max(0, worst - i - n_ctrl)
                                   if i < worst else self.vlimit[i])
                               for i in range(N)]
                 vsl_from = next((i for i in range(N)

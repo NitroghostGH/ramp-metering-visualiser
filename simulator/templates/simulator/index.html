@@ -74,6 +74,10 @@
         <label title="Minimum time a posted limit must stand before the signs may change again">Sign hold time <output id="v-vsl_hold"></output> <span class="unit">s</span></label>
         <input type="range" id="vsl_hold" min="30" max="600" step="30">
       </div>
+      <div class="ctrl">
+        <label title="How far upstream the lowest limit is posted (the controlled zone); the approach taper steps up beyond it">VSL zone length <output id="v-vsl_zone"></output> <span class="unit">km</span></label>
+        <input type="range" id="vsl_zone" min="1" max="6" step="0.5">
+      </div>
 
       <h2 class="panel-title">Demand data</h2>
       <div class="data-box">
@@ -163,7 +167,7 @@
         <i class="k-none"></i>No control <i class="k-alinea"></i>ALINEA <i class="k-vsl"></i>HERO
       </span></h2>
       <div class="chart-grid">
-        <figure><figcaption>Mean corridor speed (km/h)</figcaption><canvas class="mini" id="c-speed"></canvas></figure>
+        <figure><figcaption>Mean corridor speed (km/h) — with VSL on, amber dashes = posted limit</figcaption><canvas class="mini" id="c-speed"></canvas></figure>
         <figure><figcaption>Total vehicles queued on ramps</figcaption><canvas class="mini" id="c-queue"></canvas></figure>
         <figure><figcaption>Bottleneck occupancy (%) — dashes = target ô</figcaption><canvas class="mini" id="c-occ"></canvas></figure>
       </div>
@@ -440,9 +444,12 @@
         the limit when the bottleneck occupancy runs above target, and the limit caps the
         speed in the fundamental diagram (Eq.&nbsp;1). The signs behave like real gantries:
         limits post in 10&nbsp;km/h steps, change at most 20&nbsp;km/h at a time, must stand
-        for the <b>sign hold time</b> before changing again, and taper up going back from
-        the bottleneck (drivers see …80&nbsp;→&nbsp;60&nbsp;→&nbsp;40, never a cliff).
-        Layer it on top of any strategy with the <b>Enable VSL</b> switch.</p>
+        for the <b>sign hold time</b> before changing again, and the lowest limit covers a
+        <b>controlled zone</b> upstream of the bottleneck with an approach taper beyond it
+        (drivers see …80&nbsp;→&nbsp;60&nbsp;→&nbsp;40, never a cliff). Zone length matters —
+        too short and the flow cap barely bites; the 3&nbsp;km default works well. VSL alone
+        does little: its value shows when layered on <b>ALINEA or HERO</b> with the
+        <b>Enable VSL</b> switch.</p>
       </section>
 
       <!-- 07 -->

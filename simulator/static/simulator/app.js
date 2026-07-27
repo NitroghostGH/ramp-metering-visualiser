@@ -9,11 +9,12 @@ const DEF   = JSON.parse(app.dataset.defaults);
 const CORRS = JSON.parse(app.dataset.corridors);
 const COLORS = { none:"#f2607a", alinea:"#54d6a0", hero:"#f3c14a" };
 
-const SLIDERS = ["demand_level","alinea_gain","target_occ","control_period","hero_master","vsl_gain","vsl_hold"];
+const SLIDERS = ["demand_level","alinea_gain","target_occ","control_period","hero_master","vsl_gain","vsl_hold","vsl_zone"];
 const FMT = {
   demand_level: v => (+v).toFixed(0)+"%",
   target_occ:   v => (+v).toFixed(1),
   hero_master:  v => (+v).toFixed(2),
+  vsl_zone:     v => (+v).toFixed(1),
 };
 
 let DATA = null;
@@ -36,7 +37,7 @@ let pendingView = null;        // "map" from a shared link, applied after first 
 // query-string keys for each slider (kept short so shared links stay readable)
 const URL_KEYS = { demand_level:"d", alinea_gain:"k", target_occ:"o",
                    control_period:"cp", hero_master:"hm", vsl_gain:"vg",
-                   vsl_hold:"vh" };
+                   vsl_hold:"vh", vsl_zone:"vz" };
 
 /* shareable state: corridor + sliders + scenario round-trip via the URL */
 function applyURLState(){
@@ -128,6 +129,7 @@ function collect(){
     hero_master: parseFloat(document.getElementById("hero_master").value),
     vsl_gain: parseFloat(document.getElementById("vsl_gain").value),
     vsl_hold: parseFloat(document.getElementById("vsl_hold").value),
+    vsl_zone: parseFloat(document.getElementById("vsl_zone").value),
   };
   if(demandProfile) c.demand_profile = demandProfile;
   return c;
@@ -260,7 +262,8 @@ const MONO="11px ui-monospace, Menlo, Consolas, monospace";
 
 /* ------------------------------------------------------------ charts */
 function drawCharts(){
-  drawMini("c-speed", (RS,k)=>RS[k].mean_speed_t, {});
+  drawMini("c-speed", (RS,k)=>RS[k].mean_speed_t,
+           vslOn ? {extra:{data:DATA.results[scnKey()].vsl, color:"#f3c14a", label:"VSL"}} : {});
   drawMini("c-queue", (RS,k)=>RS[k].total_ramp_q, {});
   drawMini("c-occ",   (RS,k)=>RS[k].occ_bneck,
            {ref:{value:DATA.meta.target_occupancy, label:"ô"}});
@@ -369,6 +372,7 @@ function drawMini(id, pick, opts){
   const pad=MINI_PAD, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
   let ymax=-Infinity,ymin=Infinity;
   for(const s of series.concat(ghosts)) for(const v of s.data){ if(v>ymax)ymax=v; if(v<ymin)ymin=v; }
+  if(opts.extra) for(const v of opts.extra.data){ if(v>ymax)ymax=v; }
   ymin=Math.min(ymin,0); ymax=(ymax*1.08)||1;
   if(opts.ref) ymax=Math.max(ymax, opts.ref.value*(opts.refPad||1.25));
   const n=series[0].data.length;
@@ -394,6 +398,17 @@ function drawMini(id, pick, opts){
   ctx.lineWidth=1.6;
   for(const s of series){ ctx.strokeStyle=s.color; ctx.beginPath();
     for(let i=0;i<n;i++){const x=X(i),y=Y(s.data[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke(); }
+  // auxiliary overlay (e.g. the posted VSL on the speed chart)
+  if(opts.extra){
+    const e=opts.extra, en=e.data.length;
+    ctx.strokeStyle=e.color; ctx.setLineDash([5,4]); ctx.lineWidth=1.3; ctx.globalAlpha=0.85;
+    ctx.beginPath();
+    for(let i=0;i<en;i++){const x=pad.l+iw*i/(en-1),y=Y(e.data[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
+    ctx.fillStyle=e.color; ctx.textAlign="right";
+    ctx.fillText(e.label, w-pad.r-2, Y(e.data[en-1])-5);
+    ctx.textAlign="left";
+  }
   const fi=Math.min(Math.floor(frame),n-1), cx=X(fi);
   ctx.strokeStyle="rgba(232,237,245,.35)";ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(cx,pad.t);ctx.lineTo(cx,pad.t+ih);ctx.stroke();
@@ -642,9 +657,13 @@ function drawRoad(){
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(x1,zy); ctx.lineTo(x1,zy+7); ctx.stroke();
     ctx.font=MONO; ctx.textAlign="center";
+    const nCtrl=Math.max(1,Math.round((m.vsl_zone_km||3)/m.seg_length));
+    let prevLim=null;
     for(let i=from;i<upto;i++){
-      const lim=Math.round(Math.min(m.vlimit[i], R.vsl[fi]+step*(upto-1-i)));
+      const lim=Math.round(Math.min(m.vlimit[i], R.vsl[fi]+step*Math.max(0,upto-i-nCtrl)));
       if(lim>=m.vlimit[i]) continue;   // taper has reached the posted limit
+      if(lim===prevLim) continue;      // one sign per step; the bracket shows extent
+      prevLim=lim;
       const sx=(segX(i)+segX(i+1))/2;
       ctx.fillStyle="#0d1119"; roundRect(ctx,sx-13,zy-9,26,18,4); ctx.fill();
       ctx.strokeStyle="#f3c14a"; ctx.lineWidth=1.4; roundRect(ctx,sx-13,zy-9,26,18,4); ctx.stroke();

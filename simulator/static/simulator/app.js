@@ -169,6 +169,17 @@ function precompute(){
     R.total_ramp_q_max = Math.max(...tot, 0);
     // the feedback signal ALINEA regulates: occupancy at the bottleneck
     R.occ_bneck = R.seg_rho.map(row=>100*row[bs]/rmax);
+    // VSL coverage envelope per frame: [first, last+1) segments with a
+    // reduced sign, straight from the recorded per-segment limits
+    if(R.seg_lim){
+      const vl=DATA.meta.vlimit;
+      R.cov=R.seg_lim.map(sl=>{
+        if(!sl) return null;
+        let f=-1,l=-1;
+        for(let j=0;j<sl.length;j++) if(sl[j]<vl[j]-0.5){ if(f<0)f=j; l=j; }
+        return f<0?null:[f,l+1];
+      });
+    }
   }
 }
 
@@ -487,6 +498,32 @@ function drawHeat(){
   ctx.textAlign="center"; ctx.fillText(""+Math.round(tot/2), pad.l+iw/2, h-4);
   ctx.textAlign="right";  ctx.fillText(tot+" min", pad.l+iw, h-4);
   ctx.textAlign="left";
+  // VSL coverage envelope: amber boundaries tracking the covered segments
+  // over time, so the signs can be seen following the back of the queue
+  if(vslOn && R.cov){
+    for(const [col,lw] of [["rgba(12,16,24,.85)",2.6],["rgba(243,193,74,.85)",1.1]]){
+      ctx.strokeStyle=col; ctx.lineWidth=lw;
+      for(const edge of [0,1]){
+        ctx.beginPath(); let pen=false;
+        for(let i=0;i<n;i++){
+          const c=R.cov[i];
+          if(!c){ pen=false; continue; }
+          const x=pad.l+iw*i/(n-1), y=pad.t+c[edge]*rowH;
+          pen ? ctx.lineTo(x,y) : ctx.moveTo(x,y); pen=true;
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.lineWidth=1;
+    ctx.font=MONO; ctx.fillStyle="rgba(243,193,74,.9)";
+    const first=R.cov.findIndex(c=>c);
+    if(first>=0){
+      ctx.fillStyle="rgba(12,15,22,.7)";
+      ctx.fillRect(pad.l+iw*first/(n-1)+2, pad.t+R.cov[first][0]*rowH-13, 74, 12);
+      ctx.fillStyle="rgba(243,193,74,.9)";
+      ctx.fillText("VSL coverage", pad.l+iw*first/(n-1)+5, pad.t+R.cov[first][0]*rowH-4);
+    }
+  }
   // time cursor
   const cx=pad.l+iw*Math.min(frame,n-1)/(n-1);
   ctx.strokeStyle="rgba(255,255,255,.5)";ctx.lineWidth=1;
@@ -645,24 +682,23 @@ function drawRoad(){
   ctx.setLineDash([]); ctx.fillStyle="rgba(92,200,255,.85)"; ctx.font=MONO;
   ctx.fillText("bottleneck", bx+3, baseline-maxLanes*lanePx+2);
 
-  // VSL zone: dashed amber bracket over the tapered approach, with one sign
-  // per covered segment stepping down toward the bottleneck (…80-60-40)
-  if(vslOn && R.vsl && R.vsl[fi] < m.v_free-2){
-    const upto=R.vsl_upto ? Math.max(1,Math.min(R.vsl_upto[fi],m.n_segments)) : m.n_segments;
-    const from=R.vsl_from ? Math.max(0,Math.min(R.vsl_from[fi],upto-1)) : 0;
-    const step=m.vsl_step||20;
+  // VSL coverage: dashed amber bracket over every segment with a reduced
+  // sign, values straight from the engine's recorded per-segment limits —
+  // the flow-control zone, the queue's speed-matched signs and the approach
+  // taper all render exactly as applied (…80-60-40, tracking the queue)
+  if(vslOn && R.cov && R.cov[fi]){
+    const [from,upto]=R.cov[fi], SL=R.seg_lim[fi];
     const x0=segX(from), x1=segX(upto), zy=baseline-maxLanes*lanePx-24;
     ctx.strokeStyle="rgba(243,193,74,.75)"; ctx.lineWidth=1.2; ctx.setLineDash([6,5]);
     ctx.beginPath(); ctx.moveTo(x0,zy); ctx.lineTo(x1,zy); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(x1,zy); ctx.lineTo(x1,zy+7); ctx.stroke();
     ctx.font=MONO; ctx.textAlign="center";
-    const nCtrl=Math.max(1,Math.round((m.vsl_zone_km||3)/m.seg_length));
     let prevLim=null;
     for(let i=from;i<upto;i++){
-      const lim=Math.round(Math.min(m.vlimit[i], R.vsl[fi]+step*Math.max(0,upto-i-nCtrl)));
-      if(lim>=m.vlimit[i]) continue;   // taper has reached the posted limit
-      if(lim===prevLim) continue;      // one sign per step; the bracket shows extent
+      if(SL[i]>=m.vlimit[i]-0.5){ prevLim=null; continue; }  // gap in coverage
+      const lim=SL[i];
+      if(lim===prevLim) continue;      // one sign per change; bracket shows extent
       prevLim=lim;
       const sx=(segX(i)+segX(i+1))/2;
       ctx.fillStyle="#0d1119"; roundRect(ctx,sx-13,zy-9,26,18,4); ctx.fill();
@@ -670,7 +706,7 @@ function drawRoad(){
       ctx.fillStyle="#f3c14a"; ctx.fillText(""+lim, sx, zy+4);
     }
     ctx.textAlign="left"; ctx.fillStyle="#f3c14a";
-    ctx.fillText("VSL zone", x0+2, zy-14);
+    ctx.fillText("VSL", x0+2, zy-14);
   }
 
   // on-ramps + meters + queues (each arm is clickable → per-ramp detail panel)
@@ -740,6 +776,8 @@ function drawRoad(){
                  ["#e8edf5",m.lanes[seg]+" lanes"],
                  [speedColor(v),Math.round(v)+" km/h"],
                  ["#9fb0c5","occ "+occ.toFixed(0)+"%"]];
+    if(vslOn && R.seg_lim && R.seg_lim[fi] && R.seg_lim[fi][seg]<m.vlimit[seg]-0.5)
+      items.push(["#f3c14a","sign "+R.seg_lim[fi][seg]]);
     const yr=Math.min(Math.max(roadHover.y-14,18),h-10);
     drawReadout(ctx, items, roadHover.x, yr, marginX+2, marginX+rw);
   }

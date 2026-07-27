@@ -39,12 +39,17 @@ science behind it, see [MODEL.md](MODEL.md); to add your own network or data, se
 | **Sign hold time** | Minimum seconds a posted VSL must stand before the signs may change again. |
 | **VSL zone length** | How far upstream the lowest limit is posted (the controlled zone). |
 
-VSL signs behave like real gantries: limits post in 10 km/h steps, move at most
-20 km/h per change, and the lowest limit covers the controlled zone with an
-approach taper stepping up beyond it — on the schematic you'll see the signs
-step …80 → 60 → 40 into the dashed zone bracket, and the speed chart overlays
-the posted limit as an amber stepped line. Zone length matters: too short and
-the flow cap barely bites. VSL alone does little — layer it on ALINEA or HERO.
+VSL runs the two functions Queensland gantries run. **Flow control** posts a
+limit — proportional to how far the worst detector runs over target — across
+the VSL zone length upstream of the bottleneck. **Queue protection** covers the
+whole detected queue with speed-matched signs that follow its back as it grows
+(extending upstream immediately, retracting on the hold clock). Signs post in
+10 km/h steps, change at most 20 km/h per hold, and taper …80 → 60 → 40 on
+approach. On the schematic the dashed bracket and signs show exactly what the
+engine posted; the space–time map outlines the covered area in amber so you
+can watch it track the queue; the speed chart overlays the posted limit.
+Protection alone costs a little mainline speed — the throughput win appears
+when VSL is layered on ALINEA or HERO.
 
 Any change re-runs the simulation automatically.
 

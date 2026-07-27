@@ -24,6 +24,8 @@ HERO at the Monash Freeway; Faulkner et al. (2014) HERO on the QLD M1/M3.
 from __future__ import annotations
 
 import math
+
+import math
 from dataclasses import dataclass
 
 
@@ -51,12 +53,13 @@ class Physics:
     hero_master: float = 0.4      # fill ratio that triggers upstream recruitment
 
     # VSL
-    vsl_gain: float = 18.0
+    vsl_gain: float = 10.0        # km/h of limit reduction per %-occupancy over target
     vsl_min: float = 40.0
     vsl_compliance: float = 1.0
     vsl_hold: float = 120.0       # s a posted limit must stand before it may change
     vsl_step: float = 20.0        # km/h per sign change and per upstream taper zone
-    vsl_zone_km: float = 3.0      # length of the controlled zone at the lowest limit
+    vsl_zone_km: float = 3.0      # protection zone posted ahead of the queue tail
+    vsl_queue_speed: float = 45.0 # km/h below which a segment counts as queued
 
     # clock
     T: float = 10.0               # s
@@ -123,9 +126,14 @@ class Simulation:
 
         self.vsl_limit = self.p.v_free       # posted limit (rounded, held, stepped)
         self.vsl_target = self.p.v_free      # continuous feedback state behind it
-        self.vsl_worst = N - 1               # frozen zone edge while a limit holds
+        self.vsl_worst = N - 1               # MTFC anchor: the controlled bottleneck
+        self.vsl_tail = N - 1                # back of the detected queue
+        self.vsl_head = N - 1                # downstream end of the queue
+        self.vsl_qactive = False             # a queue is currently detected
         self.vsl_last_change = -1e9
+        self.vsl_anchor_change = -1e9
         self.vsl_zone_change = -1e9
+        self.last_limits = list(self.vlimit)  # applied limits, for queue detection
 
     # -- demand ---------------------------------------------------------------
     @staticmethod
@@ -283,24 +291,59 @@ class Simulation:
                 self.r[j] = p.ramp_capacity
 
     def vsl_update(self, t):
-        """Lower the speed limit upstream of the worst active bottleneck.
+        """Queensland-style dual-mode VSL (flow control + queue protection).
 
-        The feedback integrator runs every control period, but what drivers
-        see behaves like real gantry signs: the posted limit is rounded to
-        10 km/h, may only move one ``vsl_step`` per change, and must stand
-        for ``vsl_hold`` seconds before it (or the zone edge) can change."""
+        Before breakdown the feedback integrator meters the mainline upstream
+        of the worst detector (MTFC). Once a queue is detected — a contiguous
+        run of segments slower than ``vsl_queue_speed`` — the reduced limits
+        cover the WHOLE queue plus a protection zone ahead of its tail, and
+        the coverage extends upstream IMMEDIATELY as the queue grows (drivers
+        must never run into an unprotected queue tail) while retracting only
+        on the hold clock. The posted value still behaves like real signs:
+        10 km/h steps, one ``vsl_step`` per change, held ``vsl_hold`` s."""
         p = self.p
         occ = [p.occ_of(r) for r in self.rho]
         worst = max(range(self.N), key=lambda i: occ[i])
+        # severity-proportional limit selection: the further the worst
+        # detector runs over target, the lower the desired limit — and it
+        # recovers by itself as occupancy falls (an integrator would pin at
+        # the minimum for the whole peak regardless of severity)
         err = occ[worst] - p.target_occupancy
-        self.vsl_target = self.vsl_target - p.vsl_gain * (err / 10.0)
-        self.vsl_target = min(max(self.vsl_target, p.vsl_min), p.v_free)
+        desired = p.v_free - p.vsl_gain * max(0.0, err)
+        self.vsl_target = min(max(desired, p.vsl_min), p.v_free)
 
+        # queue detection: the contiguous slow run around the worst detector.
+        # A segment only counts as queued when it is well below the limit it
+        # was ASKED to do — otherwise the reduced signs themselves would read
+        # as a queue and the coverage could never release.
+        cong = [self.v[i] < p.vsl_queue_speed
+                and self.v[i] < self.last_limits[i] - 8.0
+                for i in range(self.N)]
+        tail = head = worst
+        if cong[worst]:
+            while tail > 0 and cong[tail - 1]:
+                tail -= 1
+            while head < self.N - 1 and cong[head + 1]:
+                head += 1
+
+        # MTFC anchor: the bottleneck being controlled, held on its own clock
         if self.vsl_limit >= p.v_free:
-            self.vsl_worst = worst   # signs are blank — track the zone freely
-        elif t - self.vsl_zone_change >= p.vsl_hold and worst != self.vsl_worst:
-            self.vsl_worst = worst   # zone edge held on its own clock, so a
-            self.vsl_zone_change = t  # drifting bottleneck can't freeze the limit
+            self.vsl_worst = worst   # signs are blank — track freely
+        elif t - self.vsl_anchor_change >= p.vsl_hold and worst != self.vsl_worst:
+            self.vsl_worst = worst
+            self.vsl_anchor_change = t
+
+        # queue coverage: extend upstream at once, retract on the hold clock
+        was_active = self.vsl_qactive
+        self.vsl_qactive = cong[worst]
+        if self.vsl_qactive and (not was_active or tail < self.vsl_tail):
+            self.vsl_tail, self.vsl_head = tail, head
+            self.vsl_zone_change = t
+        elif t - self.vsl_zone_change >= p.vsl_hold and \
+                (tail != self.vsl_tail or head != self.vsl_head):
+            self.vsl_tail, self.vsl_head = tail, head
+            self.vsl_zone_change = t
+
         if t - self.vsl_last_change >= p.vsl_hold:
             posted = round(self.vsl_target / 10.0) * 10.0
             posted = min(max(posted, self.vsl_limit - p.vsl_step),
@@ -309,14 +352,12 @@ class Simulation:
             if posted != self.vsl_limit:
                 self.vsl_limit = posted
                 self.vsl_last_change = t
-        return self.vsl_worst
 
     # -- run ------------------------------------------------------------------
     def run(self):
         p, N = self.p, self.N
         steps = int(round(p.horizon / p.T))
         ctrl_every = max(1, int(round(p.control_period / p.T)))
-        worst = self.N - 1
 
         rec = {k: [] for k in ("t", "flow_out", "flow_in", "mean_speed_t", "veh_total")}
         rec["seg_rho"] = []   # per-segment density heat map
@@ -327,6 +368,8 @@ class Simulation:
         rec["vsl"] = []
         rec["vsl_upto"] = []   # first segment NOT covered by the VSL zone
         rec["vsl_from"] = []   # first segment covered (upstream end of the taper)
+        rec["vsl_tail"] = []   # detected back of queue (zone anchor)
+        rec["seg_lim"] = []    # posted limit per segment — what the signs show
         rec["main_queue"] = []
         total_tt = 0.0
 
@@ -338,24 +381,43 @@ class Simulation:
                 elif self.control == "hero":
                     self.hero_update()
                 if self.vsl:
-                    worst = self.vsl_update(t)
+                    self.vsl_update(t)
 
             if self.vsl:
-                # controlled zone: the lowest limit is posted over vsl_zone_km
-                # upstream of the bottleneck (the MTFC application area), then
-                # an approach taper steps up by vsl_step per segment beyond it
-                # (…80-60-40 as drivers arrive — never a cliff)
+                # QLD-style coverage, three layers combined by min():
+                #  1. flow control — the feedback limit over vsl_zone_km
+                #     upstream of the controlled bottleneck (holds occupancy
+                #     at target, the throughput win);
+                #  2. queue protection — a buffer at the lowest limit just
+                #     ahead of the detected queue tail, and speed-MATCHED
+                #     signs through the queue itself (posted at or above
+                #     prevailing speed, protecting without capping recovery);
+                #  3. approach taper — a backward pass caps every drop at
+                #     vsl_step per segment, so drivers always see …80-60-40
+                #     into any reduced zone, never a cliff.
                 n_ctrl = max(1, int(round(p.vsl_zone_km / self.c["seg_length"])))
-                seg_limits = [min(self.vlimit[i],
-                                  self.vsl_limit
-                                  + p.vsl_step * max(0, worst - i - n_ctrl)
-                                  if i < worst else self.vlimit[i])
-                              for i in range(N)]
+                lim = list(self.vlimit)
+                b = self.vsl_worst
+                for i in range(max(0, b - n_ctrl), b):
+                    lim[i] = min(lim[i], self.vsl_limit)
+                if self.vsl_qactive:
+                    for i in range(self.vsl_tail, self.vsl_head + 1):
+                        # speed-matched signs with one 10 km/h step of headroom
+                        # above prevailing speed: 40-50 over the crawl, stepping
+                        # up 60-80-100 by themselves as the queue clears, never
+                        # ratcheting recovery down; the taper pass below builds
+                        # the 60-80 approach protection ahead of the tail
+                        lim[i] = min(lim[i], max(self.vsl_limit,
+                                     math.ceil(self.v[i] / 10.0) * 10.0 + 10.0))
+                for i in range(N - 2, -1, -1):
+                    lim[i] = min(lim[i], lim[i + 1] + p.vsl_step)
+                seg_limits = lim
                 vsl_from = next((i for i in range(N)
-                                 if seg_limits[i] < self.vlimit[i] - 1e-9), worst)
+                                 if seg_limits[i] < self.vlimit[i] - 1e-9), b)
             else:
                 seg_limits = list(self.vlimit)
                 vsl_from = 0
+            self.last_limits = seg_limits
 
             q_main_in, ramp_in, q_out = self.step(t, seg_limits)
 
@@ -372,8 +434,11 @@ class Simulation:
             rec["mean_speed_t"].append(round(mean_num / dens, 2))
             rec["veh_total"].append(round(veh, 1))
             rec["vsl"].append(round(self.vsl_limit, 1))
-            rec["vsl_upto"].append(int(worst) if self.vsl else 0)
+            rec["vsl_upto"].append(int(self.vsl_head) + 1 if self.vsl else 0)
             rec["vsl_from"].append(int(vsl_from))
+            rec["vsl_tail"].append(int(self.vsl_tail) if self.vsl else 0)
+            rec["seg_lim"].append([int(round(x)) for x in seg_limits]
+                                  if self.vsl else 0)
             rec["main_queue"].append(round(self.w_main, 1))
             rec["seg_rho"].append([round(x, 1) for x in self.rho])
             rec["seg_v"].append([round(x, 1) for x in self.v])

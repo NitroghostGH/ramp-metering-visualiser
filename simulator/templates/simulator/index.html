@@ -67,7 +67,7 @@
         <span class="switch-label">Enable VSL (mainstream control)</span>
       </label>
       <div class="ctrl" style="margin-top:12px">
-        <label>VSL feedback gain <output id="v-vsl_gain"></output></label>
+        <label title="km/h of limit reduction per % occupancy over target at the worst detector">VSL feedback gain <output id="v-vsl_gain"></output></label>
         <input type="range" id="vsl_gain" min="0" max="40" step="2">
       </div>
       <div class="ctrl">
@@ -440,16 +440,19 @@
         <p>Ramp metering controls the on-ramps; <b>VSL</b> controls the <i>mainline</i>.
         Lowering the posted limit upstream of a bottleneck (Mainstream Traffic Flow
         Control) meters the motorway itself — thinning the flow arriving at the merge and
-        buying the ramp controllers headroom. In the model a second feedback loop lowers
-        the limit when the bottleneck occupancy runs above target, and the limit caps the
-        speed in the fundamental diagram (Eq.&nbsp;1). The signs behave like real gantries:
-        limits post in 10&nbsp;km/h steps, change at most 20&nbsp;km/h at a time, must stand
-        for the <b>sign hold time</b> before changing again, and the lowest limit covers a
-        <b>controlled zone</b> upstream of the bottleneck with an approach taper beyond it
-        (drivers see …80&nbsp;→&nbsp;60&nbsp;→&nbsp;40, never a cliff). Zone length matters —
-        too short and the flow cap barely bites; the 3&nbsp;km default works well. VSL alone
-        does little: its value shows when layered on <b>ALINEA or HERO</b> with the
-        <b>Enable VSL</b> switch.</p>
+        buying the ramp controllers headroom. The model runs the two functions Queensland
+        gantries run. <b>Flow control</b>: a limit proportional to how far the worst
+        detector runs over target occupancy is posted over the <b>VSL zone length</b>
+        upstream of the bottleneck, capping speed in the fundamental diagram (Eq.&nbsp;1).
+        <b>Queue protection</b>: once detectors read a queue (a run of segments crawling
+        below ~45&nbsp;km/h), speed-matched signs cover the <i>whole</i> queue and follow
+        its back as it grows — extending upstream immediately, retracting only on the hold
+        clock — so drivers never run into an unprotected queue tail. Signs post in
+        10&nbsp;km/h steps, change at most 20&nbsp;km/h per <b>sign hold time</b>, and an
+        approach taper caps every drop at 20&nbsp;km/h per segment
+        (…80&nbsp;→&nbsp;60&nbsp;→&nbsp;40, never a cliff). Protection alone costs a little
+        mainline speed — the throughput win appears when VSL is layered on
+        <b>ALINEA or HERO</b> with the <b>Enable VSL</b> switch.</p>
       </section>
 
       <!-- 07 -->

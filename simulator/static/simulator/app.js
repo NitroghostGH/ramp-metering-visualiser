@@ -914,6 +914,18 @@ function renderFrame(){
   g("ro-queue", Math.round(R.total_ramp_q[fi])+" veh");
   g("ro-flow",  Math.round(R.q_bneck[fi])+" veh/h");
   g("ro-vsl",   vslOn ? R.vsl[fi].toFixed(0)+" km/h" : "off");
+  // ramp panel: live meter state phrased as real signal operation
+  if(selRamp!=null){
+    const rate=R.ramp_meter[selRamp][fi], q=R.ramp_queue[selRamp][fi];
+    const el=document.getElementById("rp-live");
+    if(control==="none"){
+      el.textContent=`unmetered · queue ${Math.round(q)} veh`;
+    }else{
+      const gap=3600/Math.max(rate,1);
+      el.textContent=`meter ${Math.round(rate)} veh/h ≈ 1 release / `
+        +(gap<10?gap.toFixed(1):Math.round(gap))+` s · queue ${Math.round(q)} veh`;
+    }
+  }
   const simSec=frame*DATA.meta.step;
   g("clock", `${String(Math.floor(simSec/60)).padStart(2,"0")}:${String(Math.floor(simSec%60)).padStart(2,"0")}`);
   document.getElementById("timeline").value=100*frame/(R.t.length-1);
@@ -982,25 +994,57 @@ function drawFD(){
   const V=r=>vf*Math.exp(-(1/a)*Math.pow(r/rc,a));
   const qmax=rc*V(rc)*1.15;
   const X=r=>pad.l+iw*r/rmax, Y=q=>pad.t+ih*(1-q/qmax);
-  // axes
+  // axes with real units (per-lane values, as detector data is presented)
   ctx.strokeStyle="#26303f"; ctx.lineWidth=1; ctx.font=MONO; ctx.fillStyle="#5c6a7e";
   ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+ih);ctx.lineTo(pad.l+iw,pad.t+ih);ctx.stroke();
-  ctx.fillText("flow", 6, pad.t+8); ctx.textAlign="right"; ctx.fillText("density →", pad.l+iw, h-6); ctx.textAlign="left";
+  ctx.save(); ctx.translate(12, pad.t+ih/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign="center"; ctx.fillText("flow · veh/h/lane", 0, 0); ctx.restore();
+  ctx.textAlign="right"; ctx.fillText(Math.round(rmax)+" veh/km/lane →", pad.l+iw, h-6);
+  ctx.textAlign="left"; ctx.fillText("0", pad.l, h-6);
   // free-flow / congested shading split at rc
   ctx.fillStyle="rgba(84,214,160,.10)"; ctx.fillRect(pad.l,pad.t,X(rc)-pad.l,ih);
   ctx.fillStyle="rgba(242,96,122,.10)"; ctx.fillRect(X(rc),pad.t,pad.l+iw-X(rc),ih);
-  // curve
-  ctx.strokeStyle="#5cc8ff"; ctx.lineWidth=2; ctx.beginPath();
+  // the bottleneck's ACTUAL equilibrium relation q = ρ·min(V(ρ), limit):
+  // a posted limit gives the FD a straight speed-limit branch at low
+  // density; the unconstrained V(ρ) curve is kept faint as the reference
+  const bs0 = DATA ? DATA.meta.bottleneck_seg : 0;
+  const limB = DATA ? DATA.meta.vlimit[bs0] : 100;
+  ctx.strokeStyle="rgba(92,200,255,.28)"; ctx.lineWidth=1.2; ctx.beginPath();
   for(let r=0;r<=rmax;r+=1){ const x=X(r),y=Y(r*V(r)); r?ctx.lineTo(x,y):ctx.moveTo(x,y); }
   ctx.stroke();
-  // critical point
-  const cx=X(rc), cy=Y(rc*V(rc));
+  ctx.strokeStyle="#5cc8ff"; ctx.lineWidth=2; ctx.beginPath();
+  for(let r=0;r<=rmax;r+=1){ const x=X(r),y=Y(r*Math.min(V(r),limB)); r?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.stroke();
+  // when VSL is restricting, show the controlled zone's reshaped FD
+  // q = ρ·min(V(ρ), posted limit) — the textbook MTFC picture: lower peak,
+  // critical density pushed right. Its peak is the cap on the flow the zone
+  // can deliver to the bottleneck, which is how VSL meters the mainline.
+  if(DATA && vslOn){
+    const Rv=DATA.results[scnKey()], fiv=frameIdx();
+    const sl = Rv.vsl ? Rv.vsl[fiv] : limB;
+    if(sl < limB-1){
+      ctx.strokeStyle="rgba(243,193,74,.85)"; ctx.setLineDash([5,4]); ctx.lineWidth=1.6;
+      ctx.beginPath();
+      for(let r=0;r<=rmax;r+=1){ const x=X(r),y=Y(r*Math.min(V(r),sl)); r?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+      ctx.stroke(); ctx.setLineDash([]);
+      let rpk=0,qpk=0;
+      for(let r=0;r<=rmax;r++){ const q=r*Math.min(V(r),sl); if(q>qpk){qpk=q;rpk=r;} }
+      ctx.fillStyle="#f3c14a"; ctx.textAlign="left";
+      ctx.fillText("VSL zone "+Math.round(sl), X(rpk)+7, Y(qpk)+11);
+    }
+  }
+  // critical point + numeric ticks
+  const qc=rc*Math.min(V(rc),limB);
+  const cx=X(rc), cy=Y(qc);
   ctx.setLineDash([3,3]); ctx.strokeStyle="#f3c14a";
   ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx,pad.t+ih);ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle="#f3c14a"; ctx.beginPath();ctx.arc(cx,cy,4.5,0,7);ctx.fill();
-  ctx.textAlign="right"; ctx.fillText("capacity", cx-9, cy-4);
+  ctx.textAlign="right"; ctx.fillText("capacity "+Math.round(qc), cx-9, cy-4);
   ctx.textAlign="left";  ctx.fillText("ô target", cx+10, cy-4);
-  ctx.fillStyle="#54d6a0"; ctx.textAlign="left"; ctx.fillText("free-flow", pad.l+8, pad.t+ih-8);
+  ctx.fillStyle="#5c6a7e"; ctx.textAlign="center";
+  ctx.fillText("ρcr "+rc, cx, h-6);
+  ctx.textAlign="right"; ctx.fillText(Math.round(qc)+"", pad.l-3, cy+3); ctx.textAlign="left";
+  ctx.fillStyle="#54d6a0"; ctx.fillText("free-flow", pad.l+8, pad.t+ih-8);
   ctx.fillStyle="#f2607a"; ctx.textAlign="right"; ctx.fillText("congested", pad.l+iw-6, pad.t+ih-8); ctx.textAlign="left";
 
   // --- live operating point: bottleneck segment, current frame & scenario ---

@@ -174,7 +174,8 @@ input[type=range]::-moz-range-thumb{
 .rp-title{font-weight:600;color:var(--ink)}
 .rp-title::before{content:"▸ ";color:var(--alinea)}
 .rp-sub{font-size:11.5px;color:var(--ink-faint);font-family:var(--mono)}
-.rp-close{margin-left:auto;background:var(--bg-2);border:1px solid var(--line);
+.rp-live{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink-dim)}
+.rp-close{margin-left:12px;background:var(--bg-2);border:1px solid var(--line);
   color:var(--ink-dim);border-radius:7px;width:24px;height:24px;line-height:1;
   font-size:14px;cursor:pointer}
 .rp-close:hover{color:var(--ink);border-color:var(--ink-faint)}

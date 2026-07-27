@@ -148,6 +148,7 @@
         <div class="rp-head">
           <span class="rp-title" id="rp-title">–</span>
           <span class="rp-sub" id="rp-sub"></span>
+          <span class="rp-live" id="rp-live"></span>
           <button id="rp-close" class="rp-close" title="Close (Esc)">×</button>
         </div>
         <div class="rp-grid">
@@ -271,13 +272,19 @@
         </div>
 
         <canvas id="fd-canvas" class="fd-canvas"></canvas>
-        <p class="cap">The gold point is capacity — peak flow, at critical density. The
-        glowing dot (with its fading trail) is the bottleneck's <b>live measured</b> state
-        (ρ, ρ·v) as the sim plays, exactly like a detector's flow–density scatter: watch it
-        climb the curve toward the peak and, without control, slip over into the congested
-        branch — where it falls <i>below</i> the curve. That gap is the capacity drop, and
-        the loop the trail traces on recovery is breakdown hysteresis. Switch scenarios to
-        compare.</p>
+        <p class="cap">The solid curve is the <b>bottleneck's</b> own relation
+        q&nbsp;=&nbsp;ρ·min(V(ρ),&nbsp;limit): its posted speed limit gives the straight
+        low-density branch, with the unconstrained V(ρ) shown faint behind. The gold point
+        is capacity — peak flow, at critical density. The glowing dot (with its fading
+        trail) is the bottleneck's <b>live measured</b> state as the sim plays, exactly
+        like a detector's flow–density scatter: watch it climb toward the peak and,
+        without control, slip into the congested branch — falling <i>below</i> the curve.
+        That gap is the capacity drop, and the loop the trail traces is breakdown
+        hysteresis. With VSL restricting, an amber dashed curve shows the <b>controlled
+        zone's</b> reshaped diagram under the posted limit — lower peak, critical density
+        pushed right. That reduced peak is the cap on what the zone can feed the
+        bottleneck, which is exactly the mainstream-flow-control mechanism. Switch
+        scenarios to compare.</p>
 
         <div class="worked">
           <span class="worked-h">Worked example · where is capacity?</span>

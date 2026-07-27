@@ -101,7 +101,9 @@ connection for the map tiles; the Schematic view works offline.
 Click any on-ramp arm on the schematic (or a ramp marker on the map) to open a
 detail panel with that ramp's **queue vs its storage limit**, **metering rate
 vs unmetered capacity**, and **occupancy at the merge vs target ô** for all
-three strategies. This is where the control logic is easiest to see: ALINEA
+three strategies. The panel header shows the live meter state phrased as real
+signal operation — the release rate and its equivalent seconds-per-vehicle
+cycle time. This is where the control logic is easiest to see: ALINEA
 throttles the rate as merge occupancy passes ô, the queue-override releases the
 meter when storage fills (the sawtooth), and under HERO an upstream ramp's rate
 dips while its own occupancy is still healthy — it has been recruited to store

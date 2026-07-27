@@ -169,6 +169,21 @@ function precompute(){
     R.total_ramp_q_max = Math.max(...tot, 0);
     // the feedback signal ALINEA regulates: occupancy at the bottleneck
     R.occ_bneck = R.seg_rho.map(row=>100*row[bs]/rmax);
+    // discharge measured AT the bottleneck, mirroring engine.step exactly:
+    // q = ρ·v·λ, capped at (1−cap_drop)·capacity under the applied limit
+    // when the bottleneck is over critical density
+    const m=DATA.meta, lanes_b=m.lanes[bs];
+    const Vc=m.v_free*Math.exp(-1/m.a_fd);   // equilibrium speed at ρ_crit
+    R.q_bneck = R.seg_rho.map((row,i)=>{
+      const rho=row[bs];
+      let q=rho*R.seg_v[i][bs]*lanes_b;
+      if(rho>m.rho_crit){
+        const lim = R.seg_lim && R.seg_lim[i] ? R.seg_lim[i][bs] : m.vlimit[bs];
+        q=Math.min(q,(1-DEF.cap_drop)*m.rho_crit*Math.min(Vc,lim)*lanes_b);
+      }
+      return q;
+    });
+    R.q_bneck_mean = R.q_bneck.reduce((a,x)=>a+x,0)/(R.q_bneck.length||1);
     // VSL coverage envelope per frame: [first, last+1) segments with a
     // reduced sign, straight from the recorded per-segment limits
     if(R.seg_lim){
@@ -225,8 +240,8 @@ function fillScoreboard(){
       + dHTML(b && r.mean_speed-b.mean_speed, 1, +1, "");
     g(`s-cong-${c}`).innerHTML  = (r.congested_frac*100).toFixed(0)+"%"
       + dHTML(b && (r.congested_frac-b.congested_frac)*100, 0, -1, "pt");
-    g(`s-flow-${c}`).innerHTML  = Math.round(r.throughput)
-      + dHTML(b && r.throughput-b.throughput, 0, +1, "");
+    g(`s-flow-${c}`).innerHTML  = Math.round(r.q_bneck_mean)
+      + dHTML(b && r.q_bneck_mean-b.q_bneck_mean, 0, +1, "");
     g(`s-ttt-${c}`).innerHTML   = r.total_travel_time.toFixed(0)
       + dHTML(b && r.total_travel_time-b.total_travel_time, 0, -1, "");
     g(`s-queue-${c}`).innerHTML = r.max_ramp_queue.toFixed(0)
@@ -322,19 +337,12 @@ function drawDemandPreview(){
   const m=DATA.meta, H=m.horizon;
   const level=parseFloat(document.getElementById("demand_level").value)/100;
   const rampBase=m.ramps.filter(r=>r.kind==="on").reduce((a,r)=>a+r.demand,0);
-  const interp=(ts,ys,t)=>{
-    if(t<=ts[0]) return ys[0];
-    if(t>=ts[ts.length-1]) return ys[ys.length-1];
-    let i=1; while(ts[i]<t) i++;
-    const f=(t-ts[i-1])/((ts[i]-ts[i-1])||1);
-    return ys[i-1]+(ys[i]-ys[i-1])*f;
-  };
   const N=90, main=[], ramp=[];
   for(let i=0;i<=N;i++){
     const t=H*i/N;
     if(demandProfile){
-      main.push(level*interp(demandProfile.time_s, demandProfile.mainline, t));
-      ramp.push(level*demandProfile.ramps.reduce((a,s)=>a+interp(demandProfile.time_s,s,t),0));
+      main.push(level*interpSeries(demandProfile.time_s, demandProfile.mainline, t));
+      ramp.push(level*demandProfile.ramps.reduce((a,s)=>a+interpSeries(demandProfile.time_s,s,t),0));
     }else{
       const ds=level*demandScale(t);
       main.push(m.mainline_demand*ds);
@@ -553,18 +561,23 @@ let particles=[], spawnAcc=0, rampAcc=[];
 function resetParticles(){ particles=[]; spawnAcc=0; rampAcc=(DATA?DATA.meta.on_ramps.map(()=>0):[]); }
 
 // After a scrub the spawn pipeline is empty; seed vehicles from the model's
-// density so the paused schematic still shows the traffic state. The 0.55
-// factor matches the visual density the flow-driven spawner settles at.
+// density so the paused schematic still shows the traffic state. One particle
+// per model vehicle (ρ·L·λ per segment) — the same 1:1 scale as the
+// flow-driven spawner, so density reads consistently before and after a scrub.
 function seedParticles(){
   resetParticles();
   if(!DATA) return;
   const m=DATA.meta, R=DATA.results[scnKey()], fi=frameIdx();
+  const counts=[]; let total=0;
   for(let i=0;i<m.n_segments;i++){
-    const count=Math.round(R.seg_rho[fi][i]*m.seg_length*m.lanes[i]*0.55);
+    counts[i]=R.seg_rho[fi][i]*m.seg_length*m.lanes[i]; total+=counts[i];
+  }
+  const scale=Math.min(1,1600/(total||1));   // thin uniformly, never one-sided
+  for(let i=0;i<m.n_segments;i++){
+    const count=Math.round(counts[i]*scale);
     for(let k=0;k<count;k++)
       particles.push({x:(i+Math.random())*m.seg_length, lf:Math.random(), spd:R.seg_v[fi][i]});
   }
-  if(particles.length>1600) particles.splice(0,particles.length-1600);
 }
 
 function demandScale(t){ // mirror engine.demand_scale (trapezoid)
@@ -572,6 +585,21 @@ function demandScale(t){ // mirror engine.demand_scale (trapezoid)
   const t0=0.10*H,t1=0.30*H,t2=0.62*H,t3=0.85*H;
   if(t<t0)return b; if(t<t1)return b+(1-b)*(t-t0)/(t1-t0);
   if(t<t2)return 1; if(t<t3)return 1+(b-1)*(t-t2)/(t3-t2); return b;
+}
+function interpSeries(ts,ys,t){
+  if(t<=ts[0]) return ys[0];
+  if(t>=ts[ts.length-1]) return ys[ys.length-1];
+  let i=1; while(ts[i]<t) i++;
+  const f=(t-ts[i-1])/((ts[i]-ts[i-1])||1);
+  return ys[i-1]+(ys[i]-ys[i-1])*f;
+}
+// live arrival demand at ramp j (veh/h) — mirrors engine.demand_at exactly,
+// including the demand-level slider and any uploaded CSV profile
+function rampDemandAt(j,tSec){
+  const lvl=DATA.meta.demand_level;
+  if(demandProfile && DATA.meta.demand_source==="uploaded")
+    return lvl*interpSeries(demandProfile.time_s, demandProfile.ramps[j], tSec);
+  return ramFullDemand(j)*lvl*demandScale(tSec);
 }
 function segAt(xKm){ const m=DATA.meta; return Math.max(0,Math.min(m.n_segments-1,Math.floor(xKm/m.seg_length))); }
 function frameIdx(){ return Math.min(Math.floor(frame), DATA.results[scnKey()].t.length-1); }
@@ -583,7 +611,10 @@ function advanceParticles(simSec){
   const V=R.seg_v[fi];
   for(const c of particles){ const v=V[segAt(c.x)]; c.spd=v; c.x+=v*hours; }
   particles=particles.filter(c=>c.x<roadLen);
-  if(particles.length>1600) particles.splice(0,particles.length-1600);
+  if(particles.length>1600){   // thin uniformly rather than dropping one end
+    const keep=1600/particles.length;
+    particles=particles.filter(()=>Math.random()<keep);
+  }
   // mainline spawn ∝ entrance flow
   spawnAcc += R.flow_in[fi]*hours;
   while(spawnAcc>=1){ spawnAcc-=1; particles.push({x:0,lf:Math.random(),spd:m.v_free}); }
@@ -591,7 +622,7 @@ function advanceParticles(simSec){
   const t=fi*m.step;
   m.on_ramps.forEach((o,j)=>{
     const meter = control==="none" ? 1e9 : R.ramp_meter[j][fi];
-    const dem = ramFullDemand(j)*demandScale(t);
+    const dem = rampDemandAt(j,t);
     const q = R.ramp_queue[j][fi];
     const merge = Math.min(meter, q>4 ? meter : dem);
     rampAcc[j]=(rampAcc[j]||0)+merge*hours;
@@ -737,10 +768,10 @@ function drawRoad(){
       const qx=rampStartX+(mx-rampStartX)*tt, qy=rampBottom+(mergeY-rampBottom)*tt;
       ctx.fillStyle="#f2607a"; roundRect(ctx,qx-2.6,qy-1.8,5.2,3.6,1.1); ctx.fill();
     }
-    // meter light
+    // meter light: red when the meter is actually holding vehicles back —
+    // a queue exists, or the rate is below live arrival demand
     const meter=control==="none"?9999:R.ramp_meter[j][fi];
-    const dem=ramFullDemand(j)*demandScale(t);
-    const restricting = control!=="none" && meter < dem-30;
+    const restricting = control!=="none" && (q>=1 || meter < rampDemandAt(j,t)-30);
     drawMeter(ctx, rampStartX-4, rampBottom-6, !restricting);
     // name
     ctx.fillStyle = j===selRamp ? "#54d6a0" : "#7d8ba0"; ctx.font=MONO; ctx.textAlign="center";
@@ -881,7 +912,7 @@ function renderFrame(){
   g("ro-occ",   R.seg_rho[fi][DATA.meta.bottleneck_seg]
                 ? (100*R.seg_rho[fi][DATA.meta.bottleneck_seg]/DATA.meta.rho_max).toFixed(1)+" %" : "–");
   g("ro-queue", Math.round(R.total_ramp_q[fi])+" veh");
-  g("ro-flow",  Math.round(R.flow_out[fi])+" veh/h");
+  g("ro-flow",  Math.round(R.q_bneck[fi])+" veh/h");
   g("ro-vsl",   vslOn ? R.vsl[fi].toFixed(0)+" km/h" : "off");
   const simSec=frame*DATA.meta.step;
   g("clock", `${String(Math.floor(simSec/60)).padStart(2,"0")}:${String(Math.floor(simSec%60)).padStart(2,"0")}`);
@@ -978,19 +1009,21 @@ function drawFD(){
     const col=COLORS[control]||"#5cc8ff";
     const px=r=>Math.max(pad.l,Math.min(pad.l+iw,X(r)));
     const py=q=>Math.max(pad.t,Math.min(pad.t+ih,Y(q)));
-    // The dot rides the equilibrium curve at the live density, so it always
-    // reads as a point ON the fundamental diagram (dynamic speed overshoots
-    // would otherwise float it above capacity during transitions).
+    // The dot is the TRUE flow the model passed at the bottleneck (per lane,
+    // capacity-drop cap included — the same series as the discharge readout).
+    // During breakdown it falls BELOW the equilibrium curve: that gap is the
+    // capacity drop, and the loop the trail traces is breakdown hysteresis.
+    const lanes_b=DATA.meta.lanes[bs];
     // fading trail over the last ~30 frames (≈5 min of model time)
     for(let i=Math.max(0,fi-30);i<fi;i++){
-      const rho=R.seg_rho[i][bs];
+      const r_=R.seg_rho[i][bs];
       ctx.globalAlpha=Math.max(0,0.05+0.45*(i-(fi-30))/30);
-      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(px(rho),py(rho*V(rho)),1.8,0,7); ctx.fill();
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(px(r_),py(R.q_bneck[i]/lanes_b),1.8,0,7); ctx.fill();
     }
     ctx.globalAlpha=1;
     // current state
     const rho=R.seg_rho[fi][bs], v=R.seg_v[fi][bs];
-    const x=px(rho), y=py(rho*V(rho));
+    const x=px(rho), y=py(R.q_bneck[fi]/lanes_b);
     ctx.setLineDash([2,3]); ctx.strokeStyle="rgba(232,237,245,.25)"; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(x,pad.t+ih); ctx.lineTo(x,y); ctx.lineTo(pad.l,y); ctx.stroke();
     ctx.setLineDash([]);
